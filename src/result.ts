@@ -1,10 +1,15 @@
 /**
  * Turning what a handler returns into what a client receives.
  *
- * A handler returns plain data. An object goes out twice: as compact JSON text,
- * which every client can show a model, and as `structuredContent`, which a
- * client can use without parsing text. Compact, because the reader of that text
- * is usually a model paying for every character, not a person.
+ * A handler returns plain data. An object goes out as compact JSON text, which
+ * every client can show a model. Compact, because the reader of that text is
+ * usually a model paying for every character, not a person.
+ *
+ * Only a tool that declares an output schema also sends `structuredContent`.
+ * Codex hands a model the structured copy in place of the text, as one escaped
+ * string: on a 700-character result that cost 211 more tokens than the text,
+ * and it hides a `render` text or an image the same way. With a schema the
+ * copy is typed and validated data a client can use; without one it only costs.
  */
 
 import type { CallToolResult, ContentBlock } from "@modelcontextprotocol/server";
@@ -77,7 +82,8 @@ export function toCallToolResult(tool: Tool, value: unknown, secrets: Secrets): 
       part.type === "text" ? ({ ...part, text: secrets.redact((part as { text: string }).text) } as ContentBlock) : part,
     );
     const data = secrets.redactDeep(value.data);
-    const structured = data !== undefined && (isPlainObject(data) || tool.output !== undefined);
+    // Without a schema the parts are the result, and the data is for a terminal.
+    const structured = data !== undefined && tool.output !== undefined;
     return structured ? { content: parts, structuredContent: data as Record<string, unknown> } : { content: parts };
   }
 
@@ -96,12 +102,9 @@ export function toCallToolResult(tool: Tool, value: unknown, secrets: Secrets): 
   }
 
   const body = rendered ?? (typeof data === "object" ? JSON.stringify(data) : String(data));
-  // An object is always typed data. Anything else only is when the tool declares
-  // an output schema, because the protocol needs a schema to describe it.
-  if (isPlainObject(data) || tool.output !== undefined) {
-    return { content: [text(body)], structuredContent: data as Record<string, unknown> };
-  }
-  return { content: [text(body)] };
+  return tool.output !== undefined
+    ? { content: [text(body)], structuredContent: data as Record<string, unknown> }
+    : { content: [text(body)] };
 }
 
 export function errorResult(error: SlipwayError, secrets: Secrets): CallToolResult {

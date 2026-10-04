@@ -53,9 +53,22 @@ describe("CLI: discovery", () => {
     expect(run.stderr).toContain("Did you mean 'get-note'?");
   });
 
-  it("prints its version with the framework's", async () => {
+  it("prints the bare version, for scripts that compare it, and names the framework in agent-context", async () => {
     const run = await cli(createApp(), ["--version"]);
-    expect(run.stdout).toMatch(/^notes 1\.0\.0 \(slipway \d+\.\d+\.\d+\)/);
+    expect(run.stdout).toBe("1.0.0\n");
+    const context = JSON.parse((await cli(createApp(), ["agent-context"])).stdout);
+    expect(context.framework).toMatchObject({ name: "slipway", version: expect.stringMatching(/^\d+\.\d+\.\d+$/) });
+  });
+
+  it("explains a built-in command with --help instead of running it", async () => {
+    const install = await cli(createApp(), ["install", "--help"]);
+    expect(install.code).toBe(0);
+    expect(install.stdout).toContain("Usage: notes-cli install <client>");
+    expect(install.stdout).toContain("claude-code");
+    expect(install.stdout).toContain("--dry-run");
+    const doctor = await cli(createApp(), ["doctor", "--help"]);
+    expect(doctor.code).toBe(0);
+    expect(doctor.stdout).toContain("doctor [--network]");
   });
 
   it("generates shell completion from the same tool list", async () => {

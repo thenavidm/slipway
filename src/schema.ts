@@ -29,9 +29,22 @@ const TARGET = { target: "draft-2020-12" } as const;
  *
  * This is how a tool generated from an OpenAPI document or a pinned contract
  * joins the same tool list as hand-written ones.
+ *
+ * The validator compiles on the tool's first call, not when the server starts.
+ * Compiling all 123 schemas of one server up front held its first answer back
+ * by 118 ms, for tools most sessions never call. `slipway check` compiles every
+ * one, so a schema that cannot compile still fails before release.
  */
 export function jsonSchema<T = Record<string, unknown>>(schema: JsonSchema): Schema<T, T> {
-  return fromJsonSchema<T>(schema);
+  let compiled: Schema<T, T> | undefined;
+  return {
+    "~standard": {
+      version: 1,
+      vendor: "mcp",
+      jsonSchema: { input: () => schema, output: () => schema },
+      validate: (value: unknown) => (compiled ??= fromJsonSchema<T>(schema))["~standard"].validate(value),
+    },
+  };
 }
 
 /** The input of a tool that takes nothing. */

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { defineTool, z } from "../src/index.js";
-import { cli, connect } from "../src/testing.js";
+import { cli, connect, resultData } from "../src/testing.js";
 import { createApp } from "./fixtures/notes.js";
 import { createRenderApp, createService } from "./fixtures/renders.js";
 
@@ -43,15 +43,15 @@ describe("job tools", () => {
   it("hand back the job to check later when it is still running, and finish it through the status tool", async () => {
     const mcp = await connect(createRenderApp());
     const started = await mcp.callTool("render_video", { title: "Trailer", wait_seconds: 0 });
-    expect(started.structuredContent).toMatchObject({ job_id: "r1", done: false, status: { state: "queued" } });
-    expect((started.structuredContent as { check: string }).check).toBe('Call render_video_status with job_id "r1" to check on it. Pass wait_seconds to wait for it to finish.');
+    expect(resultData(started)).toMatchObject({ job_id: "r1", done: false, status: { state: "queued" } });
+    expect((resultData(started) as { check: string }).check).toBe('Call render_video_status with job_id "r1" to check on it. Pass wait_seconds to wait for it to finish.');
 
     const checked = await mcp.callTool("render_video_status", { job_id: "r1", wait_seconds: 0 });
-    expect(checked.structuredContent).toMatchObject({ done: false, status: { state: "rendering", percent: 50 } });
+    expect(resultData(checked)).toMatchObject({ done: false, status: { state: "rendering", percent: 50 } });
     const finished = await mcp.callTool("render_video_status", { job_id: "r1", wait_seconds: 5 });
     await mcp.close();
-    expect(finished.structuredContent).toMatchObject({ done: true, status: { state: "done" } });
-    expect((finished.structuredContent as Record<string, unknown>).check).toBeUndefined();
+    expect(resultData(finished)).toMatchObject({ done: true, status: { state: "done" } });
+    expect((resultData(finished) as Record<string, unknown>).check).toBeUndefined();
   });
 
   it("stop waiting at the deadline and say how to check again", async () => {
@@ -96,7 +96,7 @@ describe("background jobs", () => {
     const service = createService();
     const mcp = await connect(createRenderApp(service));
     const started = await mcp.callTool("export_archive", { wait_seconds: 0 });
-    const job = started.structuredContent as { job_id: string; done: boolean; progress: unknown; check: string };
+    const job = resultData(started) as { job_id: string; done: boolean; progress: unknown; check: string };
     expect(job.job_id).toMatch(/^job_[0-9a-f]{24}$/);
     expect(job.done).toBe(false);
     expect(job.progress).toEqual({ progress: 10, total: 100, message: "counting" });
@@ -104,14 +104,14 @@ describe("background jobs", () => {
     service.finishExport!({ rows: 42 });
     const finished = await mcp.callTool("export_archive_status", { job_id: job.job_id, wait_seconds: 5 });
     await mcp.close();
-    expect(finished.structuredContent).toMatchObject({ job_id: job.job_id, done: true, result: { rows: 42 }, progress: { progress: 100 } });
-    expect((finished.structuredContent as { finished_at?: string }).finished_at).toMatch(/^\d{4}-/);
+    expect(resultData(finished)).toMatchObject({ job_id: job.job_id, done: true, result: { rows: 42 }, progress: { progress: 100 } });
+    expect((resultData(finished) as { finished_at?: string }).finished_at).toMatch(/^\d{4}-/);
   });
 
   it("report the handler's own error once the job failed", async () => {
     const service = createService();
     const mcp = await connect(createRenderApp(service));
-    const job = (await mcp.callTool("export_archive", { wait_seconds: 0 })).structuredContent as { job_id: string };
+    const job = resultData(await mcp.callTool("export_archive", { wait_seconds: 0 })) as { job_id: string };
     service.failExport!(Object.assign(new Error("Disk full"), { status: 507 }));
     const failed = await mcp.callTool("export_archive_status", { job_id: job.job_id, wait_seconds: 5 });
     await mcp.close();

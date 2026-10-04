@@ -92,6 +92,22 @@ describe("slipway check", () => {
     expect(by("instructions")).toHaveLength(1);
   });
 
+  it("compiles a JSON Schema on its first call, and check compiles every one", async () => {
+    const broken = jsonSchema({ type: "object", properties: { id: { $ref: "#/$defs/missing" } } });
+    // Defining the tool compiles nothing, so a server starts without paying for schemas it may never use.
+    const app = slipway({
+      name: "lazy",
+      version: "0.0.1",
+      context: () => ({}),
+      tools: [defineTool({ name: "get_thing", title: "Get a thing", description: "Get one thing by its id, from the account.", input: broken, risk: "read", handler: () => ({}) })],
+    });
+    await expect(Promise.resolve().then(() => broken["~standard"].validate({ id: 1 }))).rejects.toThrow(/missing/);
+    const report = await checkApp(app, { env: {} });
+    const compile = report.findings.filter((finding) => finding.check === "schema" && finding.message.includes("does not compile"));
+    expect(compile).toEqual([expect.objectContaining({ level: "error", tool: "get_thing" })]);
+    expect(report.ok).toBe(false);
+  });
+
   it("flags schemas that are too large and definitions sent twice", async () => {
     const huge = { type: "object", properties: Object.fromEntries(Array.from({ length: 400 }, (_, i) => [`field_${i}`, { type: "string", description: "x".repeat(60) }])) };
     const block = { type: "object", properties: { a: { type: "string" } } };

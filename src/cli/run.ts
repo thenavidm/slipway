@@ -17,7 +17,7 @@ import { outputJsonSchema } from "../schema.js";
 import { didYouMean, searchTools } from "../search.js";
 import type { Tool } from "../tool.js";
 import { completionScript } from "./completion.js";
-import { agentContext, SLIPWAY_VERSION } from "./context.js";
+import { agentContext } from "./context.js";
 import { flagsFor, missingRequired, parseJsonValue, parseToolArgs } from "./flags.js";
 import { BUILTINS, renderGeneralHelp, renderList, renderToolHelp, toolLine } from "./help.js";
 import { formatOutput, type Format } from "./output.js";
@@ -198,8 +198,9 @@ function print(io: CliIO, text: string): number {
   return EXIT.ok;
 }
 
+/** The bare version, which scripts compare. `agent-context` names the framework and its version. */
 function printVersion(app: App, io: CliIO): number {
-  return print(io, `${app.name} ${app.version} (slipway ${SLIPWAY_VERSION})`);
+  return print(io, app.version);
 }
 
 function json(globals: Globals, value: unknown): string {
@@ -207,6 +208,9 @@ function json(globals: Globals, value: unknown): string {
 }
 
 async function runBuiltin(app: App, io: CliIO, command: string, rest: string[], globals: Globals): Promise<number> {
+  // `<built-in> --help` explains the command instead of running it.
+  if (globals.help && command === "install") return print(io, (await import("./install.js")).installHelp(app, io.bin));
+  if (globals.help && command !== "help") return print(io, renderGeneralHelp(app, io.bin));
   const target = rest.find((token) => !token.startsWith("-"));
   switch (command) {
     case "tools":

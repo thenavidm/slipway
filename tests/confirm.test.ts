@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { connect, type ElicitAnswer, type ElicitRequest } from "../src/testing.js";
+import { connect, type ElicitAnswer, type ElicitRequest, resultData } from "../src/testing.js";
 import { canAskPerson, confirmRoute, promptsItself } from "../src/confirm.js";
 import { createApp, createStore } from "./fixtures/notes.js";
 
@@ -50,7 +50,7 @@ for (const era of ["legacy", "modern"] as const) {
       await mcp.close();
 
       expect(result.isError).toBeFalsy();
-      expect(result.structuredContent).toEqual({ deleted: 1 });
+      expect(resultData(result)).toEqual({ deleted: 1 });
       expect(someone.asked).toHaveLength(1);
       expect(someone.asked[0]!.message).toBe("Notes wants to delete note 1.\n\nThis is public or cannot be undone.");
       expect(someone.asked[0]!.requestedSchema).toMatchObject({
@@ -100,7 +100,7 @@ for (const era of ["legacy", "modern"] as const) {
       const result = await mcp.callTool("delete_note", { id: 3 });
       await mcp.close();
       expect(tool._meta?.["anthropic/requiresUserInteraction"]).toBe(true);
-      expect(result.structuredContent).toEqual({ deleted: 3 });
+      expect(resultData(result)).toEqual({ deleted: 3 });
       expect(someone.asked).toHaveLength(0);
     });
 
@@ -119,7 +119,7 @@ for (const era of ["legacy", "modern"] as const) {
       const done = await mcp.callTool("delete_note", { id: 4, confirm: true });
       await mcp.close();
       expect(payload(refused).error).toContain("confirm: true");
-      expect(done.structuredContent).toEqual({ deleted: 4 });
+      expect(resultData(done)).toEqual({ deleted: 4 });
     });
 
     it("lets the model confirm alone when the operator chose that, and stops asking anyone", async () => {
@@ -131,7 +131,7 @@ for (const era of ["legacy", "modern"] as const) {
       await mcp.close();
       expect(someone.asked).toHaveLength(0);
       expect(payload(refused)).toMatchObject({ code: "refused" });
-      expect(done.structuredContent).toEqual({ deleted: 5 });
+      expect(resultData(done)).toEqual({ deleted: 5 });
     });
 
     it("never asks a person to approve a call that would be refused anyway", async () => {
@@ -150,7 +150,7 @@ for (const era of ["legacy", "modern"] as const) {
       await mcp.close();
       expect(someone.asked).toHaveLength(1);
       expect(someone.asked[0]!.message).toBe("Notes wants to export every note.\n\nThis has an effect that cannot be taken back.");
-      expect(result.structuredContent).toMatchObject({ count: 7 });
+      expect(resultData(result)).toMatchObject({ count: 7 });
     });
   });
 }
@@ -181,7 +181,7 @@ describe("approvals cannot be faked or reused", () => {
     const again = await mcp.send("tools/call", { name: "delete_note", arguments: { id: 1 }, inputResponses: accepted, requestState: fresh.requestState });
     await mcp.close();
 
-    expect((once as { structuredContent: unknown }).structuredContent).toEqual({ deleted: 1 });
+    expect(resultData(once as never)).toEqual({ deleted: 1 });
     expect(payload(again as never).error).toContain("already used");
     expect(store.calls).toEqual(["delete_note 1"]);
   });

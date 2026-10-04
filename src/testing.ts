@@ -1,10 +1,10 @@
 /**
  * Helpers for testing an app the way its users reach it.
  *
- *     import { connect, cli } from "@thenavidm/slipway/testing";
+ *     import { connect, cli, resultData } from "@thenavidm/slipway/testing";
  *
  *     const mcp = await connect(app, { env });
- *     const result = await mcp.callTool("get_profile", { actor: "alice" });
+ *     const profile = resultData(await mcp.callTool("get_profile", { actor: "alice" }));
  *
  *     const { code, stdout } = await cli(app, ["get-profile", "alice", "--json"], { env });
  */
@@ -24,6 +24,17 @@ export type { ConnectOptions, ElicitAnswer, ElicitRequest, ListedTool, RpcClient
 export function connect(app: App, options: ConnectOptions & { env?: NodeJS.ProcessEnv } = {}): Promise<RpcClient> {
   const { env, ...rest } = options;
   return connectInMemory(app, env ?? {}, rest);
+}
+
+/**
+ * The data a tool call returned: its `structuredContent` when the tool declares
+ * an output schema, otherwise the JSON in its first text block.
+ */
+export function resultData<T = any>(result: { content?: ReadonlyArray<{ type: string; text?: string }>; structuredContent?: unknown }): T {
+  if (result.structuredContent !== undefined) return result.structuredContent as T;
+  const first = result.content?.find((part) => part.type === "text");
+  if (first?.text === undefined) throw new Error("The result has no structured content and no text.");
+  return JSON.parse(first.text) as T;
 }
 
 export type CliRun = { code: number; stdout: string; stderr: string };

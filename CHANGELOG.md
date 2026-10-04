@@ -2,6 +2,14 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.4, 2026-10-04: faster starts, cheaper results in Codex
+
+- **A JSON Schema compiles on its tool's first call.** `jsonSchema()` compiled its validator as soon as a tool was defined, so a server paid for every schema before it could answer. On Teachable's 123 contract tools that held the first answer back by 118 ms. Building Stripe's 611 OpenAPI tools took 1,745 ms and now takes 69; GitHub's 1,230 took 646 ms and now take 60 (medians of three runs on one Mac). A tool's first call now compiles its own schema, a median of 3 ms on Stripe's and under 1 ms on GitHub's.
+- **`slipway check` compiles every schema.** A schema that cannot compile, such as one with a broken `$ref`, used to stop the server at startup. It now fails the check, before release, and names the tool.
+- **`--version` prints the bare version.** It printed `notes 1.0.0 (slipway 0.1.3)`, where every server built before Slipway prints `1.0.0`, so a script comparing versions broke on migration. `agent-context` still names the framework and its version.
+- **`structuredContent` only for a tool with an output schema.** An object result went out as JSON text and again as `structuredContent`. Codex hands a model the structured copy in place of the text, as one escaped string, so on a measured Teachable call it read 211 more tokens than for the same JSON as text, and the copy also hid a `render` text or an image. An untyped result is now text alone; a typed one still carries its validated copy. `resultData()` in `@thenavidm/slipway/testing` reads either.
+- **A built-in command explains itself with `--help`.** `install --help` failed asking for a client; it now lists the clients and flags. Every other built-in prints the general help instead of running.
+
 ## 0.1.3, 2026-10-04: npx picks the server by name
 
 - **`slipway check` matches npm's real rule.** npx picks a binary named after the package only when the binaries point to different files. When they share one file it starts whichever one the registry lists first, and the registry does not keep the published order: 23 published servers listed their MCP binary first and still started the CLI. 0.1.2's order check could not catch that. The check now requires a binary named after the package on a file of its own, and the README shows the one-line `src/npx.ts` it runs.

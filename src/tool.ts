@@ -152,7 +152,7 @@ export type ToolDefinition<Ctx, I extends Schema, O extends Schema | undefined> 
   cache?: CacheOptions;
   /** This read lists records worth keeping locally: `data sync` copies every page, `data search` finds them. */
   sync?: SyncOptions;
-  /** Text for the result, when JSON is not the best way to read it. Typed data still goes out as `structuredContent`. */
+  /** Text for the result, when JSON is not the best way to read it. With `output` declared, the data also goes out as `structuredContent`. */
   render?: (result: Returns<O>) => string;
   handler: (args: InferOutput<I>, ctx: ToolContext<Ctx>) => Returns<O> | Promise<Returns<O>>;
 };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { connect } from "../src/testing.js";
+import { connect, resultData } from "../src/testing.js";
 import { createApp, createStore } from "./fixtures/notes.js";
 
 function payload(result: { content?: Array<{ type: string; text?: string }> }) {
@@ -54,6 +54,15 @@ describe("MCP surface", () => {
     expect(result.content[0]).toEqual({ type: "text", text: '{"id":1,"title":"Note 1","body":"Body 1"}' });
   });
 
+  it("sends an untyped result as text alone, because Codex reads a structured copy in place of the text", async () => {
+    const mcp = await connect(createApp());
+    const result = await mcp.callTool("list_notes", {});
+    await mcp.close();
+    expect(result.structuredContent).toBeUndefined();
+    expect(result.content).toHaveLength(1);
+    expect(resultData(result)).toMatchObject({ notes: expect.any(Array) });
+  });
+
   it("refuses an irreversible call without confirm, and runs it with confirm", async () => {
     const store = createStore();
     const mcp = await connect(createApp(store));
@@ -68,7 +77,7 @@ describe("MCP surface", () => {
     const done = await mcp.callTool("delete_note", { id: 1, confirm: true });
     await mcp.close();
     expect(done.isError).toBeFalsy();
-    expect(done.structuredContent).toEqual({ deleted: 1 });
+    expect(resultData(done)).toEqual({ deleted: 1 });
     expect(store.notes.some((note) => note.id === 1)).toBe(false);
   });
 
@@ -80,7 +89,7 @@ describe("MCP surface", () => {
     await mcp.close();
     expect(bad.isError).toBe(true);
     expect(extra.isError).toBe(true);
-    expect(good.structuredContent).toMatchObject({ id: 1, title: "Renamed" });
+    expect(resultData(good)).toMatchObject({ id: 1, title: "Renamed" });
   });
 
   it("reports upstream failures with a code a model can act on", async () => {
@@ -97,7 +106,7 @@ describe("MCP surface", () => {
     const result = await mcp.callTool("whoami", {});
     await mcp.close();
     expect(JSON.stringify(result)).not.toContain("sk-live-1234567890");
-    expect(result.structuredContent).toMatchObject({ echoed: "key=[redacted]" });
+    expect(resultData(result)).toMatchObject({ echoed: "key=[redacted]" });
   });
 
   it("times a slow tool out instead of leaving the client waiting", async () => {
@@ -109,12 +118,12 @@ describe("MCP surface", () => {
     expect(payload(result)).toMatchObject({ code: "timeout" });
   });
 
-  it("passes content results through, with their data as structured content", async () => {
+  it("passes content results through, and keeps their data for the terminal when no output schema types it", async () => {
     const mcp = await connect(createApp());
     const result = await mcp.callTool("chart", {});
     await mcp.close();
     expect(result.content[0]).toMatchObject({ type: "image", mimeType: "image/png" });
-    expect(result.structuredContent).toEqual({ width: 1, height: 1 });
+    expect(result.structuredContent).toBeUndefined();
   });
 
   it("hides every write in read-only mode and refuses them if called anyway", async () => {
@@ -166,16 +175,16 @@ describe("search surface", () => {
     expect(names).toEqual(["call_tool", "describe_tool", "search_tools"]);
 
     const found = await mcp.callTool("search_tools", { query: "delete a note" });
-    expect((found.structuredContent as { tools: Array<{ name: string }> }).tools[0]!.name).toBe("delete_note");
+    expect((resultData(found) as { tools: Array<{ name: string }> }).tools[0]!.name).toBe("delete_note");
 
     const described = await mcp.callTool("describe_tool", { name: "delete_note" });
-    expect((described.structuredContent as { requires_confirm: boolean }).requires_confirm).toBe(true);
+    expect((resultData(described) as { requires_confirm: boolean }).requires_confirm).toBe(true);
 
     const refused = await mcp.callTool("call_tool", { name: "delete_note", arguments: { id: 2 } });
     expect(payload(refused)).toMatchObject({ code: "refused" });
     const done = await mcp.callTool("call_tool", { name: "delete_note", arguments: { id: 2 }, confirm: true });
     await mcp.close();
-    expect(done.structuredContent).toEqual({ deleted: 2 });
+    expect(resultData(done)).toEqual({ deleted: 2 });
     expect(store.calls).toEqual(["delete_note 2"]);
   });
 });

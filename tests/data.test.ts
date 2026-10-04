@@ -2,7 +2,7 @@ import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { matchQuery, searchText, scopeOf } from "../src/data.js";
-import { cli, connect } from "../src/testing.js";
+import { cli, connect, resultData } from "../src/testing.js";
 import { createApp } from "./fixtures/notes.js";
 import { createCatalog, createLibrary, libraryEnv } from "./fixtures/library.js";
 
@@ -19,7 +19,7 @@ describe("the local cache", () => {
     expect(catalog.calls).toEqual(["get b1"]);
     expect(first._meta?.["slipway/cache"]).toBeUndefined();
     expect(second._meta?.["slipway/cache"]).toMatchObject({ age_seconds: expect.any(Number) });
-    expect(second.structuredContent).toEqual(first.structuredContent);
+    expect(resultData(second)).toEqual(resultData(first));
   });
 
   it("forgets every cached answer for the account after a write", async () => {
@@ -175,14 +175,14 @@ describe("local data over MCP", () => {
     expect(names).toEqual(["list_books", "get_book", "rename_book", "local_search", "local_sync", "local_sync_status"]);
 
     const empty = await mcp.callTool("local_search", { query: "salt" });
-    expect(empty.structuredContent).toMatchObject({ count: 0, hint: expect.stringContaining("local_sync") });
+    expect(resultData(empty)).toMatchObject({ count: 0, hint: expect.stringContaining("local_sync") });
 
     const synced = await mcp.callTool("local_sync", { tool: "list_books", wait_seconds: 5 });
-    expect(synced.structuredContent).toMatchObject({ done: true, result: { records: 5, complete: true } });
+    expect(resultData(synced)).toMatchObject({ done: true, result: { records: 5, complete: true } });
 
     const found = await mcp.callTool("local_search", { query: "salt stone", tool: "list_books" });
     await mcp.close();
-    expect(found.structuredContent).toMatchObject({ count: 1, results: [{ tool: "list_books", id: "b4" }] });
+    expect(resultData(found)).toMatchObject({ count: 1, results: [{ tool: "list_books", id: "b4" }] });
   });
 
   it("are a toolset an operator can switch off, and absent from apps with nothing to sync", async () => {

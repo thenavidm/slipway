@@ -124,6 +124,14 @@ export async function checkApp(app: App, options: CheckOptions = {}): Promise<Ch
     if (undocumented.length) add("warn", "descriptions", `No description for: ${undocumented.join(", ")}.`, tool.name);
     const problem = meta?.(schema);
     if (problem) add("error", "schema", `Not valid JSON Schema 2020-12: ${problem}`, tool.name);
+    // A JSON Schema validator compiles on the tool's first call, so compile each one here instead.
+    for (const [which, candidate] of [["input", tool.schema], ["output", tool.output]] as const) {
+      try {
+        await candidate?.["~standard"].validate({});
+      } catch (error) {
+        add("error", "schema", `The ${which} schema does not compile: ${(error as Error).message}`, tool.name);
+      }
+    }
 
     const bytes = schemaBytes(schema);
     totalBytes += bytes;

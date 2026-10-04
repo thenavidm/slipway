@@ -59,7 +59,7 @@ For a tool generated from an API contract, pass the operation's JSON Schema thro
 
 ## Results and errors
 
-- Return plain data. An object goes out as compact JSON text and as `structuredContent`.
+- Return plain data. An object goes out as compact JSON text; with `output` declared, also as validated `structuredContent`.
 - Add `output` when the shape is stable, so results are validated and typed for clients.
 - Return `content([image(bytes, "image/png")], data)` for images, audio, files and links.
 - Throw `httpError(status, message)` for upstream failures, or `UsageError`, `NotFoundError`, `AuthError`, `RateLimitError`, `ApiError`, `NotConfiguredError`. Each carries its exit code.

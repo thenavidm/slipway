@@ -23,6 +23,26 @@ function describe(plan: InstallPlan): string {
   return lines.join("\n");
 }
 
+/** What `install --help` prints. */
+export function installHelp(app: App, bin: string): string {
+  return [
+    ``,
+    `Usage: ${bin} install <client> [flags]`,
+    ``,
+    `Adds ${app.title} to an MCP client in that client's own format, and keeps a backup of any file it changes.`,
+    ``,
+    `Clients: ${Object.keys(CLIENTS).join(", ")}`,
+    ``,
+    `Flags:`,
+    `  --scope user|project   where the client keeps it, for a client that has both`,
+    `  --name <name>          the server's name in the client (default: ${app.name})`,
+    `  --copy-env             copy credentials into the client's file, for a client that sees no environment`,
+    `  --local                start this copy on disk instead of the published package`,
+    `  --dry-run              show the change without making it`,
+    ``,
+  ].join("\n");
+}
+
 export async function runInstall(app: App, io: CliIO, tokens: string[], options: { agent: boolean; dryRun: boolean; format: Format }): Promise<number> {
   const client = tokens.find((token) => !token.startsWith("--") && !["--scope", "--name"].includes(tokens[tokens.indexOf(token) - 1] ?? "")) as ClientId | undefined;
   const ids = Object.keys(CLIENTS) as ClientId[];

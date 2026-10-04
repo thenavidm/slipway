@@ -181,7 +181,7 @@ function registerSearchSurface<Ctx>(server: McpServer, app: App<Ctx>, env: NodeJ
         summary: firstSentence(tool.description),
       }));
       const data = { query, count: matches.length, tools: matches };
-      return { content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data };
+      return { content: [{ type: "text", text: JSON.stringify(data) }] };
     },
   );
 
@@ -206,7 +206,7 @@ function registerSearchSurface<Ctx>(server: McpServer, app: App<Ctx>, env: NodeJ
         ...(tool.output ? { output_schema: outputJsonSchema(tool.output) } : {}),
         ...(tool.examples.length ? { examples: tool.examples } : {}),
       };
-      return { content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data };
+      return { content: [{ type: "text", text: JSON.stringify(data) }] };
     },
   );
 

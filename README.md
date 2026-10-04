@@ -83,7 +83,7 @@ They are the same program reading the same tool definitions, so anything one can
 - **Local data.** Reads can opt in to a cache, kept per account and cleared by any write. `data sync`, `data search` and `data sql` keep an offline, searchable copy of any list, in one private SQLite file with nothing to install.
 - **OpenAPI to tools.** `fromOpenAPI()` turns every operation in a document into a tool, with the risk its method implies, its tags as toolsets, and a hash pin that refuses a changed document. It turns 611 of the 612 operations in Stripe's API into tools, and 1,230 of GitHub's 1,232; the rest are file uploads or raw text.
 - **One command to install.** `<cli> install codex`, or `claude-code`, `claude-desktop`, `cursor`, `vscode` or `gemini`, adds the server to that client's own configuration and passes credentials on instead of writing them down.
-- **Typed results.** Declare an output schema and results go out as validated `structuredContent`. Object results are structured even without one.
+- **Typed results.** Declare an output schema and results also go out as validated `structuredContent`. Without one, a result is compact text alone: Codex reads a structured copy in place of the text, and on a measured call that cost 211 more tokens.
 - **Contract tools.** A tool built from a pinned JSON contract joins the same list as a hand-written Zod tool, with `jsonSchema({...})`.
 - **Toolsets and a search surface** for large catalogs, so a client loads only what a person turns on.
 - **Typed errors and exit codes.** Every error carries its exit code and a hint: JSON on stderr in a terminal, a readable error result over MCP.
@@ -196,7 +196,7 @@ npx picks a binary named after the package only when the binaries point to diffe
 
 `notes-mcp` with no arguments serves MCP over stdio and stays silent on stdout. `notes-cli` with no arguments lists the commands. Any argument on either binary is a command, so a typo is reported instead of starting a server that waits on stdin.
 
-The context is built on the first call that needs it, never at startup. `--help` works with nothing configured, and the server answers a client at once and explains what is missing instead of exiting.
+The context is built on the first call that needs it, never at startup, and so is each tool's JSON Schema validator: Stripe's 611 generated tools are ready in about 70 ms. `--help` works with nothing configured, and the server answers a client at once and explains what is missing instead of exiting.
 
 ## 3. Tools
 
@@ -224,7 +224,7 @@ The context is built on the first call that needs it, never at startup. `--help`
 | `render` | Text for the result when JSON is not the best way to read it |
 | `handler` | `(args, ctx) => result`. `ctx` is your context plus `signal`, `surface`, `env`, `progress`, `log` and `secrets` |
 
-A handler returns plain data. An object goes out as compact JSON text and as typed `structuredContent`. Return `content([...], data)` with `image()`, `audio()`, `file()` or `resourceLink()` for anything that is not text.
+A handler returns plain data. An object goes out as compact JSON text, and as typed `structuredContent` too when the tool declares `output`. Return `content([...], data)` with `image()`, `audio()`, `file()` or `resourceLink()` for anything that is not text.
 
 Throw one of the error classes and the caller gets its exit code. `httpError(status, message)` maps an HTTP status in one line, and `UsageError`, `NotFoundError`, `AuthError`, `RateLimitError`, `ApiError` and `NotConfiguredError` cover the rest.
 
@@ -492,10 +492,10 @@ Parity runs on both protocol revisions a client may open with. `slipway docs dis
 ## 13. Testing
 
 ```ts
-import { checkApp, cli, connect } from "@thenavidm/slipway/testing";
+import { checkApp, cli, connect, resultData } from "@thenavidm/slipway/testing";
 
 const mcp = await connect(app, { env: { NOTES_API_KEY: "test" } });
-const result = await mcp.callTool("get_note", { id: 7 });
+const note = resultData(await mcp.callTool("get_note", { id: 7 }));
 await mcp.close();
 
 const { code } = await cli(app, ["delete-note", "7"], { env: {} });
@@ -504,7 +504,7 @@ const { code } = await cli(app, ["delete-note", "7"], { env: {} });
 const report = await checkApp(app, { env: {} });
 ```
 
-`connect` talks to the real server over an in-memory transport, through the same stdio entry the binary runs. `cli` runs the real CLI with captured output. To stub the network, build the app with a context that returns a fake client.
+`connect` talks to the real server over an in-memory transport, through the same stdio entry the binary runs. `resultData` reads what a call returned, typed or not. `cli` runs the real CLI with captured output. To stub the network, build the app with a context that returns a fake client.
 
 To test approval by a person, give `connect` an `elicit` answer, and pass `era: "modern"` for the 2026-07-28 revision or `clientInfo` to be a particular client:
 
@@ -673,7 +673,7 @@ Return `content([image(bytes, "image/png")], data)`. `audio()`, `file()` and `re
 <details>
 <summary><b>Do I need an output schema?</b></summary>
 
-No. An object result already goes out as `structuredContent`. Declare `output` when you want the result validated before it leaves the server and its shape advertised to clients, which lets a client use the data without parsing text.
+No. Without one, an object result goes out as compact JSON text, which every client reads. Declare `output` when you want the result validated before it leaves the server, its shape advertised, and a typed `structuredContent` copy sent for clients that use data without parsing text. Codex reads that copy in place of the text, so a schema is worth declaring when something uses the shape.
 
 </details>
 
