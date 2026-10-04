@@ -227,7 +227,8 @@ export function renderGeneralHelp(app: App, bin: string): string {
     ...(app.definition.settings ?? []).filter((setting) => !setting.tuning).map((setting): [string, string] => [setting.env, setting.description]),
     [`${names.readOnly}=1`, "hide and refuse every write"],
     [`${names.allowDestructive}=0`, "refuse the irreversible writes"],
-    [`${names.toolsets}=a,b`, "only these toolsets, or all"],
+    // With no tagged tool every tool is always on, so the switch would do nothing.
+    ...(app.allTools.some((tool) => tool.tags.length > 0) ? ([[`${names.toolsets}=a,b`, "only these toolsets, or all"]] as Array<[string, string]>) : []),
     [`${names.surface}=search`, "MCP lists three finder tools instead"],
     [`${names.auditLog}=<file>`, "log every attempted write"],
     [`${names.toolTimeoutMs}=<ms>`, "deadline for any tool"],

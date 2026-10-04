@@ -2,6 +2,15 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.7, 2026-10-05: what Threads and ThriveCart needed, and what Substack and WordPress will
+
+- **`riskFor`: a write whose arguments decide its risk.** Publishing is destructive and saving a draft is a write, from the same tool. `risk` stays the highest a call can be, which is what clients see in annotations and listings; the guard, the approval and the audit log go by the call, and only a destructive call needs confirming. WordPress's post tools need it: 1.1 confirmed publishing and not drafting.
+- **`onServe`: work that belongs to a running server.** It runs once the server is answering, over stdio or HTTP, and never for a CLI command, with the context and the server's logger; a throw is logged and the server keeps serving. Threads uses it to warn that a token expires this week, and Substack's queue of scheduled Notes needs it.
+- **A tool's own consequence.** `consequence` replaces "is public or cannot be undone" in the refusal and the approval form. ThriveCart's refund said it "is public" on Slipway and now says it "moves money or ends a customer's access and cannot be undone", as its own release did.
+- **`which` lists only the close matches.** Results scoring at least half of the best one, and always the top three. On Threads, "publish a post staged earlier" printed ten lines, 1,077 characters, where three carried the answer.
+- **`<PREFIX>_TOOLSETS` is listed only when some tool has a toolset.** With none, every tool is always on and the switch does nothing, so help and `agent-context` stop offering it.
+- **Tests from the servers that moved.** ThriveCart's cases for `--select` paths that share a head and for a list of choices typed as repeated words now run here, where that code lives.
+
 ## 0.1.6, 2026-10-05: what Mastodon's move needed
 
 - **`login` runs the app's own sign-in, with the words after it.** `mastodon-cli login mastodon.social --oob` hands `mastodon.social --oob` to Mastodon's flow, which registers an app on that instance and signs in. A flow given with `usage` and `help` shows them in help, `login --help` and `agent-context`, so nobody has to guess that it takes an instance.

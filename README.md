@@ -213,6 +213,8 @@ The context is built on the first call that needs it, never at startup, and so i
 | `output` | Optional. Results are validated against it and sent as `structuredContent` |
 | `risk` | `read`, `write` (easy to undo) or `destructive` (public, irreversible, or both) |
 | `requireConfirm` | Defaults to true for destructive tools. Set it on a write that spends money |
+| `riskFor` | `(args) => risk`, when the arguments decide it: publishing is destructive, saving a draft is a write. `risk` stays the highest, which clients see; the guard, confirmation and audit log go by the call |
+| `consequence` | What a confirmed call does, in the tool's own words for the refusal and the approval form: "moves money and cannot be undone". Defaults to "is public or cannot be undone" |
 | `idempotent`, `openWorld` | Annotation hints. Reads are idempotent by default; every tool is open world unless it never leaves the machine |
 | `tags` | Toolsets this tool belongs to. A tool with no tags is always on |
 | `summary` | One line for the refusal message and the audit log: "delete note 7" |
@@ -431,6 +433,8 @@ Errors are JSON on stderr, always, with `error`, `code` and a `hint` that names 
 
 HTTP binds `127.0.0.1` and checks the Host header, so a web page cannot reach it through a name that resolves to localhost. It refuses to listen on any other address without `<PREFIX>_HTTP_TOKEN`, because anyone who reached the port would act as your account.
 
+Work that belongs to a running server goes in `onServe(ctx, log)`, which runs once the server is answering over either transport and never for a CLI command: a queue that publishes on time, or a warning that a token expires this week. A throw there is logged and the server keeps serving.
+
 Resources and prompts are optional and take a few lines each:
 
 ```ts
@@ -550,7 +554,7 @@ Every server reads these, under its own prefix: the app name in capitals, `NOTES
 | `<PREFIX>_CONFIRM` | `human` | `model` lets `confirm: true` alone confirm, for an agent with no person to ask |
 | `<PREFIX>_CACHE` | `1` | `0` never answers from the local cache |
 | `<PREFIX>_DATA_DIR` | the system's data folder | Where the local data file lives |
-| `<PREFIX>_TOOLSETS` | `all` | Comma-separated toolsets to turn on |
+| `<PREFIX>_TOOLSETS` | `all` | Comma-separated toolsets to turn on. Listed only when some tool has a toolset |
 | `<PREFIX>_SURFACE` | `full` | `search` lists three tools that find, describe and run the rest |
 | `<PREFIX>_TOOL_TIMEOUT_MS` | none | Give up on any tool after this long |
 | `<PREFIX>_HTTP_PORT` | `8787`, or the app's `httpPort` | For `--http` |

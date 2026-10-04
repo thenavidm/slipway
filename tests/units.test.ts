@@ -43,6 +43,13 @@ describe("flags", () => {
     expect(parseToolArgs(["--text", "x", "--draft", "false"], flags, [])).toEqual({ text: "x", draft: false });
   });
 
+  /** From ThriveCart: an enum element is a word you type, so `--status refunded` must not need JSON quotes. */
+  it("takes an array of choices as a repeated word", () => {
+    const statuses = flagsFor(inputJsonSchema(z.object({ status: z.array(z.enum(["paid", "refunded"])).optional() })));
+    expect(statuses[0]).toMatchObject({ kind: "enum", repeatable: true });
+    expect(parseToolArgs(["--status", "paid", "--status", "refunded"], statuses, [])).toEqual({ status: ["paid", "refunded"] });
+  });
+
   it("explains a mistake in terms of flags", () => {
     expect(() => parseToolArgs(["--cuont", "3"], flags, [])).toThrow("Unknown option --cuont. Did you mean --count?");
     expect(() => parseToolArgs(["--count", "three"], flags, [])).toThrow("--count expects a whole number");
@@ -54,6 +61,17 @@ describe("output", () => {
   it("selects nested fields across arrays without losing siblings", () => {
     const data = { posts: [{ uri: "a", text: "x", author: { handle: "h", name: "n" } }] };
     expect(selectFields(data, ["posts.uri", "posts.author.handle"])).toEqual({ posts: [{ uri: "a", author: { handle: "h" } }] });
+  });
+
+  /**
+   * From ThriveCart: two paths under one head overwrote each other, so
+   * `--select orders.id,orders.total` quietly returned only the total, on a
+   * connector where the dropped field might be the amount.
+   */
+  it("keeps every path that shares a head, at every depth, beside a scalar", () => {
+    expect(selectFields({ orders: [{ id: "9999", total: 4900, item_name: "Bundle" }] }, ["orders.id", "orders.total"])).toEqual({ orders: [{ id: "9999", total: 4900 }] });
+    expect(selectFields({ a: { b: { c: 1, d: 2, e: 3 } } }, ["a.b.c", "a.b.e"])).toEqual({ a: { b: { c: 1, e: 3 } } });
+    expect(selectFields({ x: 1, y: { z: 2, w: 3 } }, ["x", "y.z", "y.w"])).toEqual({ x: 1, y: { z: 2, w: 3 } });
   });
 
   it("escapes CSV cells and flattens nested values", () => {

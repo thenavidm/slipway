@@ -124,6 +124,20 @@ export type ToolDefinition<Ctx, I extends Schema, O extends Schema | undefined> 
    * generation.
    */
   requireConfirm?: boolean;
+  /**
+   * The risk of one call, when its arguments decide it: publishing is
+   * destructive, saving a draft is a write. `risk` stays the highest a call can
+   * be, which is what clients see in annotations and listings. The guard, the
+   * confirmation and the audit log go by this, and with it only a destructive
+   * call needs confirming.
+   */
+  riskFor?: (args: InferOutput<I>) => Risk;
+  /**
+   * What a confirmed call does that cannot be taken back, as the refusal and
+   * the approval form put it: "moves money and cannot be undone". Defaults to
+   * "is public or cannot be undone" for a destructive tool.
+   */
+  consequence?: string;
   /** Toolsets this tool belongs to. A tool with no tags is always on. */
   tags?: string[];
   /** One line for the audit log and the refusal message: "post 'Hello' as @alice". */
@@ -168,6 +182,10 @@ export type Tool<Ctx = any> = {
   readonly idempotent: boolean;
   readonly openWorld: boolean;
   readonly requireConfirm: boolean;
+  /** The risk of one call, from its arguments. `forCall` applies it. */
+  readonly riskFor?: (args: any) => Risk;
+  /** What a confirmed call does that cannot be taken back, in the tool's own words. */
+  readonly consequence?: string;
   readonly tags: readonly string[];
   readonly examples: readonly ToolExample[];
   readonly positional: readonly string[];
@@ -221,6 +239,10 @@ export function defineTool<Ctx = unknown, I extends Schema = Schema<Record<strin
     if (!TAG.test(tag)) throw new Error(`${where}: tag '${tag}' must be lowercase words joined by dashes.`);
   }
   if (typeof definition.handler !== "function") throw new Error(`${where}: handler is required.`);
+  if (definition.riskFor !== undefined) {
+    if (typeof definition.riskFor !== "function") throw new Error(`${where}: riskFor must be a function of the arguments.`);
+    if (definition.risk === "read") throw new Error(`${where}: riskFor is for a write whose arguments decide how far it reaches; a read has nothing to decide.`);
+  }
   const job = definition.job;
   if (job) {
     if (definition.name.length > 57) throw new Error(`${where}: a job tool's name is at most 57 characters, so its status tool fits in 64.`);
@@ -278,6 +300,8 @@ export function defineTool<Ctx = unknown, I extends Schema = Schema<Record<strin
     idempotent: definition.idempotent ?? definition.risk === "read",
     openWorld: definition.openWorld ?? true,
     requireConfirm,
+    ...(definition.riskFor ? { riskFor: definition.riskFor as (args: any) => Risk } : {}),
+    ...(definition.consequence?.trim() ? { consequence: definition.consequence.trim().replace(/\.$/, "") } : {}),
     tags: Object.freeze([...(definition.tags ?? [])]),
     examples: Object.freeze([...(definition.examples ?? [])]),
     positional: Object.freeze([...(definition.positional ?? [])]),
@@ -331,4 +355,25 @@ export function summarize(tool: Pick<Tool, "summary" | "title">, args: Record<st
   } catch {
     return fallback;
   }
+}
+
+const REACH: Record<Risk, number> = { read: 0, write: 1, destructive: 2 };
+
+/**
+ * The tool as one call sees it. With `riskFor`, the call's risk comes from its
+ * arguments, never above the declared one, and only a destructive call needs
+ * confirming. Like `summarize`, it runs before validation, so a `riskFor` that
+ * throws on odd arguments counts as the declared risk.
+ */
+export function forCall<Ctx>(tool: Tool<Ctx>, args: Record<string, unknown>): Tool<Ctx> {
+  if (!tool.riskFor) return tool;
+  let risk: Risk = tool.risk;
+  try {
+    const asked = tool.riskFor(args);
+    if (asked in REACH && REACH[asked] < REACH[tool.risk]) risk = asked;
+  } catch {
+    // The declared risk is the safe answer.
+  }
+  if (risk === tool.risk) return tool;
+  return { ...tool, risk, requireConfirm: tool.requireConfirm && risk === "destructive" };
 }

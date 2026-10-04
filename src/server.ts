@@ -15,7 +15,7 @@ import type { Policy } from "./policy.js";
 import { errorResult, isPlainObject, toCallToolResult } from "./result.js";
 import { outputJsonSchema } from "./schema.js";
 import { firstSentence, searchTools } from "./search.js";
-import type { Tool } from "./tool.js";
+import { forCall, type Tool } from "./tool.js";
 
 /** Claude Code shows a person a permission prompt on every call to a tool carrying this, in any mode. */
 export const REQUIRES_USER_INTERACTION = "anthropic/requiresUserInteraction";
@@ -107,11 +107,13 @@ async function confirmFirst<Ctx>(
   policy: Policy,
   listedForPerson: boolean,
 ): Promise<{ ask: unknown } | { approvedBy?: InvokeOptions["approvedBy"] }> {
-  if (!tool.requireConfirm) return {};
+  // A call whose arguments make it a plain write needs nobody's approval, even on a tool that can publish.
+  const call = forCall(tool, args);
+  if (!call.requireConfirm) return {};
   const route = confirmRoute(policy.confirm, clientView(server, ctx), listedForPerson);
   if (route === "client") return { approvedBy: "client" };
   if (route === "flag") return {};
-  const ask = await personApproval(app, tool, args, ctx, env);
+  const ask = await personApproval(app, call, args, ctx, env);
   return ask ? { ask } : { approvedBy: "person" };
 }
 

@@ -28,7 +28,7 @@ import { isContentResult } from "./result.js";
 import { formatIssues, validate, type Schema } from "./schema.js";
 import { buildServer } from "./server.js";
 import { localDataTools } from "./sync.js";
-import { defineTool, isTool, summarize, type Logger, type RunContext, type Surface, type Tool, type ToolContext } from "./tool.js";
+import { defineTool, forCall, isTool, summarize, type Logger, type RunContext, type Surface, type Tool, type ToolContext } from "./tool.js";
 
 export type ResourceDefinition<Ctx> = {
   /** A short id: "accounts". */
@@ -148,6 +148,13 @@ export type AppDefinition<Ctx> = {
    * a scope.
    */
   doctorNetwork?: boolean;
+  /**
+   * Runs once the server is answering, over stdio or HTTP, and never for a CLI
+   * command. For work that belongs to a running server, such as a queue that
+   * publishes on time, or a warning such as a token about to expire. It gets
+   * the context and the server's stderr logger; a throw is logged, never fatal.
+   */
+  onServe?: (ctx: Ctx, log: Logger) => void | Promise<void>;
   /**
    * How to sign in: printed instructions, or an interactive flow that returns an
    * exit code. A flow gets the words after `login`: `mastodon-cli login mastodon.social`.
@@ -384,7 +391,7 @@ export function slipway<Ctx>(definition: AppDefinition<Ctx>): App<Ctx> {
       assertVisible(tool, policy, envPrefix);
       const { confirm: _confirm, ...args } = rawArgs;
       const summary = summarize(tool, args);
-      new Guard(policy, options.surface, envPrefix).preflight(tool, summary);
+      new Guard(policy, options.surface, envPrefix).preflight(forCall(tool, args), summary);
       return summary;
     },
 
@@ -399,8 +406,10 @@ export function slipway<Ctx>(definition: AppDefinition<Ctx>): App<Ctx> {
         options.approvedBy ?? (options.confirmed === true || confirm === true ? "flag" : undefined);
       const dryRun = options.dryRun === true;
       const summary = summarize(tool, args);
+      // What this call risks, which `riskFor` may put below the tool's declared risk.
+      const call = forCall(tool, args);
       const guard = new Guard(policy, options.surface, envPrefix);
-      guard.check(tool, { confirmedBy, dryRun, summary });
+      guard.check(call, { confirmedBy, dryRun, summary });
 
       const ctx = await app.context(env);
       const timeoutMs = tool.timeoutMs ?? policy.toolTimeoutMs;
@@ -416,7 +425,7 @@ export function slipway<Ctx>(definition: AppDefinition<Ctx>): App<Ctx> {
           surface: options.surface,
           env,
           dryRun,
-          tool: { name: tool.name, risk: tool.risk },
+          tool: { name: tool.name, risk: call.risk },
           secrets,
           log,
           async progress(progress, total, message) {
@@ -432,7 +441,7 @@ export function slipway<Ctx>(definition: AppDefinition<Ctx>): App<Ctx> {
         return { dry_run: true, tool: tool.name, summary, would_run: secrets.redactDeep(wouldRun) } satisfies DryRun;
       }
 
-      const writes = tool.risk !== "read" || tool.requireConfirm;
+      const writes = call.risk !== "read" || call.requireConfirm;
       const cache = tool.cache && policy.cache ? { scope: app.dataScope(ctx), key: cacheKey(args), ttlSeconds: tool.cache.ttlSeconds } : undefined;
       if (cache && !options.refresh) {
         const hit = await quietly(log, async () => (await app.localData(env)).cacheGet(cache.scope, tool.name, cache.key));
@@ -476,7 +485,7 @@ export function slipway<Ctx>(definition: AppDefinition<Ctx>): App<Ctx> {
         } else {
           result = await untilAborted(Promise.resolve(tool.handler(args, toolContext)), signal, timeoutMs, tool.name);
         }
-        if (writes) guard.record(tool, summary, (result as JobResult | undefined)?.done === false ? "started" : "done");
+        if (writes) guard.record(call, summary, (result as JobResult | undefined)?.done === false ? "started" : "done");
         await forget();
         // Only data is cached. Images and files are fetched again.
         if (cache && !isContentResult(result)) {
@@ -485,7 +494,7 @@ export function slipway<Ctx>(definition: AppDefinition<Ctx>): App<Ctx> {
         }
         return result;
       } catch (error) {
-        if (writes) guard.record(tool, summary, "failed");
+        if (writes) guard.record(call, summary, "failed");
         await forget();
         throw toSlipwayError(error);
       }

@@ -218,3 +218,35 @@ describe("advertised schemas", () => {
     expect(wrong.isError).toBe(true);
   });
 });
+
+describe("a write whose arguments decide its risk, over MCP", () => {
+  it("lists the highest risk, runs a draft without confirm, and refuses to publish without it", async () => {
+    const app = slipway({
+      name: "blog",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [
+        defineTool({
+          name: "save_post",
+          title: "Save a post",
+          description: "Save a post as a draft, or publish it, which everyone can read at once.",
+          input: z.object({ title: z.string(), status: z.enum(["draft", "publish"]) }),
+          risk: "destructive",
+          riskFor: (args) => (args.status === "publish" ? "destructive" : "write"),
+          handler: (args) => ({ saved: args.status }),
+        }),
+      ],
+    });
+    const mcp = await connect(app);
+    const [tool] = await mcp.listTools();
+    expect(tool!.annotations).toMatchObject({ destructiveHint: true });
+    expect(Object.keys(tool!.inputSchema.properties as object)).toContain("confirm");
+    const draft = await mcp.callTool("save_post", { title: "a", status: "draft" });
+    const publish = await mcp.callTool("save_post", { title: "b", status: "publish" });
+    const confirmed = await mcp.callTool("save_post", { title: "c", status: "publish", confirm: true });
+    await mcp.close();
+    expect(resultData(draft)).toEqual({ saved: "draft" });
+    expect(payload(publish)).toMatchObject({ code: "refused" });
+    expect(resultData(confirmed)).toEqual({ saved: "publish" });
+  });
+});

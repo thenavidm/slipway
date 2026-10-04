@@ -84,7 +84,9 @@ export function agentContext(app: App, env: NodeJS.ProcessEnv, bin: string, opti
       })),
       { env: names.readOnly, value: policy.readOnly, description: "hide and refuse every write" },
       { env: names.allowDestructive, value: policy.allowDestructive, description: "allow public or irreversible writes" },
-      { env: names.toolsets, value: policy.toolsets === "all" ? "all" : [...policy.toolsets], description: "toolsets that are on" },
+      ...(app.allTools.some((tool) => tool.tags.length > 0)
+        ? [{ env: names.toolsets, value: policy.toolsets === "all" ? "all" : [...policy.toolsets], description: "toolsets that are on" }]
+        : []),
       { env: names.surface, value: policy.surface, description: "full tool list, or search for very large catalogs" },
       { env: names.auditLog, value: policy.auditLog ?? null, description: "file that records every attempted write" },
       { env: names.toolTimeoutMs, value: policy.toolTimeoutMs ?? null, description: "deadline for any tool" },

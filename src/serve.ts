@@ -7,6 +7,7 @@ import { Readable } from "node:stream";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { stderrLogger, type App } from "./app.js";
+import type { Logger } from "./tool.js";
 import { UsageError } from "./errors.js";
 
 /**
@@ -30,17 +31,28 @@ export async function serveStdioApp(app: App, env: NodeJS.ProcessEnv): Promise<v
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  void warnIfUnconfigured(app, env, log.warn);
+  void afterStart(app, env, log);
 }
 
-async function warnIfUnconfigured(app: App, env: NodeJS.ProcessEnv, warn: (message: string) => void): Promise<void> {
+/**
+ * Once the server is answering: say if nothing is configured, then run the
+ * app's `onServe`. Nothing here can hold up the handshake or stop the server.
+ */
+export async function afterStart(app: App, env: NodeJS.ProcessEnv, log: Logger): Promise<void> {
+  let ctx: unknown;
   try {
-    const ctx = await app.context(env);
+    ctx = await app.context(env);
     if (app.definition.configured && !(await app.definition.configured(ctx))) {
-      warn(`Nothing is configured yet. Tools that need an account will say what is missing. Run \`${app.bins.cli} doctor\`.`);
+      log.warn(`Nothing is configured yet. Tools that need an account will say what is missing. Run \`${app.bins.cli} doctor\`.`);
     }
   } catch (error) {
-    warn(`Setup is incomplete: ${(error as Error).message} Run \`${app.bins.cli} doctor\`.`);
+    log.warn(`Setup is incomplete: ${(error as Error).message} Run \`${app.bins.cli} doctor\`.`);
+    return;
+  }
+  try {
+    await app.definition.onServe?.(ctx, log);
+  } catch (error) {
+    log.warn(app.secrets.redact((error as Error)?.message ?? String(error)));
   }
 }
 
@@ -93,6 +105,7 @@ export async function serveHttpApp(app: App, env: NodeJS.ProcessEnv, options: Ht
   const port = address && typeof address === "object" ? address.port : options.port;
   const url = `http://${options.host.includes(":") && !options.host.startsWith("[") ? `[${options.host}]` : options.host}:${port}/mcp`;
   log.info(`listening on ${url}${options.token ? " (bearer token required)" : ""}`);
+  void afterStart(app, env, log);
 
   return {
     url,

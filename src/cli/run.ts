@@ -244,7 +244,11 @@ async function runBuiltin(app: App, io: CliIO, command: string, rest: string[], 
     case "which": {
       const query = rest.filter((token) => !token.startsWith("-")).join(" ");
       if (!query) throw new UsageError("which expects the words for what you want to do: which schedule a post");
-      const matches = searchTools(app.tools(io.env), query, 10);
+      // Only the close matches: on Threads the right command scored 20 and the eighth 9, and the
+      // ten-line list cost an agent more to read than the answer was worth.
+      const found = searchTools(app.tools(io.env), query, 10);
+      const best = found[0]?.score ?? 0;
+      const matches = found.filter(({ score }, index) => index < 3 || score >= best / 2);
       if (globals.format !== "auto") {
         return print(io, json(globals, matches.map(({ tool, score }) => ({ command: tool.command, title: tool.title, risk: tool.risk, score: Number(score.toFixed(2)) }))));
       }

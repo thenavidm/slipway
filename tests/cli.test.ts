@@ -48,6 +48,24 @@ describe("CLI: discovery", () => {
     expect(run.stdout.split("\n")[0]).toContain("delete-note");
   });
 
+  it("lists only the close matches, at least three, so the answer costs less to read than the list", async () => {
+    const tools = Array.from({ length: 12 }, (_, i) =>
+      defineTool({ name: `get_post_report_${i}`, title: `Get post report ${i}`, description: `Read the report on post number ${i}, with its totals.`, risk: "read", handler: () => ({}) }),
+    );
+    const app = slipway({
+      name: "probe",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [defineTool({ name: "publish_staged", title: "Publish a staged post", description: "Publish a post that was staged earlier, by its container id.", risk: "write", handler: () => ({}) }), ...tools],
+    });
+    const lines = (await cli(app, ["which", "publish", "a", "staged", "post"])).stdout.trim().split("\n");
+    expect(lines[0]).toContain("publish-staged");
+    // Twelve tools mention a post; the weak matches past the third are left out.
+    expect(lines.length).toBe(3);
+    const json = JSON.parse((await cli(app, ["which", "publish", "a", "staged", "post", "--json"])).stdout);
+    expect(json).toHaveLength(3);
+  });
+
   it("shows each command only the output flags it can use, since an agent pays for every line", async () => {
     const read = (await cli(createApp(), ["get-note", "--help"])).stdout;
     expect(read).toContain("--select");
@@ -379,5 +397,83 @@ describe("CLI: doctor that always calls the service", () => {
     expect((await cli(app, ["doctor"])).stdout).toContain("run with --network to call the service");
     await cli(app, ["doctor", "--network"]);
     expect(seen).toEqual([false, true]);
+  });
+});
+
+describe("a write whose arguments decide its risk", () => {
+  const audit = join(mkdtempSync(join(tmpdir(), "slipway-riskfor-")), "audit.jsonl");
+  const saved: string[] = [];
+  const app = slipway({
+    name: "blog",
+    version: "1.0.0",
+    context: () => ({}),
+    tools: [
+      defineTool({
+        name: "save_post",
+        title: "Save a post",
+        description: "Save a post as a draft, or publish it, which everyone can read at once.",
+        input: z.object({ title: z.string(), status: z.enum(["draft", "publish"]).default("draft") }),
+        risk: "destructive",
+        riskFor: (args) => (args.status === "publish" ? "destructive" : "write"),
+        handler: (args) => (saved.push(`${args.status}:${args.title}`), { saved: args.status }),
+      }),
+    ],
+  });
+  const env = { BLOG_AUDIT_LOG: audit };
+
+  it("saves a draft without --confirm and refuses to publish without it", async () => {
+    expect((await cli(app, ["save-post", "--title", "a", "--status", "draft"], { env })).code).toBe(0);
+    const refused = await cli(app, ["save-post", "--title", "b", "--status", "publish"], { env });
+    expect(refused.code).toBe(2);
+    expect(JSON.parse(refused.stderr).code).toBe("refused");
+    expect((await cli(app, ["save-post", "--title", "c", "--status", "publish", "--confirm"], { env })).code).toBe(0);
+    expect(saved).toEqual(["draft:a", "publish:c"]);
+    const risks = readFileSync(audit, "utf8").trim().split("\n").map((line) => JSON.parse(line)).map((entry) => `${entry.risk} ${entry.outcome}`);
+    expect(risks).toEqual(["write allowed", "write done", "destructive blocked: no confirm", "destructive allowed", "destructive done"]);
+  });
+
+  it("keeps drafts with irreversible writes switched off, and still lists the highest risk", async () => {
+    const off = { BLOG_ALLOW_DESTRUCTIVE: "0" };
+    expect((await cli(app, ["save-post", "--title", "d", "--status", "draft"], { env: off })).code).toBe(0);
+    expect((await cli(app, ["save-post", "--title", "e", "--status", "publish", "--confirm"], { env: off })).code).toBe(2);
+    expect((await cli(app, [], { env: off })).stdout).toMatch(/! save-post/);
+  });
+
+  it("is refused on a read, which has no risk to decide", () => {
+    expect(() =>
+      defineTool({ name: "get_post", title: "Get a post", description: "Read one post by its id.", risk: "read", riskFor: () => "write", handler: () => ({}) }),
+    ).toThrow(/riskFor/);
+  });
+});
+
+describe("a tool's own consequence, and a switch that would do nothing", () => {
+  const app = slipway({
+    name: "shop",
+    version: "1.0.0",
+    context: () => ({}),
+    tools: [
+      defineTool({
+        name: "refund_order",
+        title: "Refund an order",
+        description: "Refund an order in full, which sends the money back to the buyer at once.",
+        input: z.object({ order: z.string() }),
+        risk: "destructive",
+        consequence: "moves money and cannot be undone.",
+        handler: () => ({ refunded: true }),
+      }),
+    ],
+  });
+
+  it("says what the refused call does, in the tool's own words", async () => {
+    const run = await cli(app, ["refund-order", "--order", "9"]);
+    expect(run.code).toBe(2);
+    expect(JSON.parse(run.stderr).error).toMatch(/^refund_order moves money and cannot be undone, so it will not run without --confirm/);
+  });
+
+  it("leaves out <PREFIX>_TOOLSETS when no tool has a toolset", async () => {
+    expect((await cli(app, ["--help"])).stdout).not.toContain("SHOP_TOOLSETS");
+    const context = JSON.parse((await cli(app, ["agent-context"])).stdout);
+    expect(context.settings.map((setting: { env: string }) => setting.env)).not.toContain("SHOP_TOOLSETS");
+    expect((await cli(createApp(), ["--help"])).stdout).toContain("NOTES_TOOLSETS");
   });
 });

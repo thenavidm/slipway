@@ -74,3 +74,28 @@ describe("HTTP transport", () => {
     expect(httpOptions(shipped, { PODS_HTTP_PORT: "9100" }, ["--http", "--port=9200"]).port).toBe(9200);
   });
 });
+
+describe("onServe", () => {
+  it("runs once the server is answering, with the context, and a throw only logs", async () => {
+    const seen: unknown[] = [];
+    const app = slipway({ name: "queue", version: "1.0.0", context: () => ({ queue: "notes" }), tools: [], onServe: (ctx) => void seen.push(ctx) });
+    const served = await serveHttpApp(app, {}, { host: "127.0.0.1", port: 0 });
+    close = served.close;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(seen).toEqual([{ queue: "notes" }]);
+
+    const failing = slipway({ name: "queue", version: "1.0.0", context: () => ({}), tools: [], onServe: () => { throw new Error("queue file is unreadable"); } });
+    const second = await serveHttpApp(failing, {}, { host: "127.0.0.1", port: 0 });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect((await fetch(second.url.replace("/mcp", "/health"))).status).toBe(200);
+    await second.close();
+  });
+
+  it("never runs for a CLI command", async () => {
+    let served = 0;
+    const app = slipway({ name: "queue", version: "1.0.0", context: () => ({}), tools: [], onServe: () => void served++ });
+    await app.runCli(["--version"], { stdout: () => undefined, stderr: () => undefined, stdin: async () => "", env: {}, isTTY: false, bin: app.bins.cli });
+    await app.runCli(["doctor"], { stdout: () => undefined, stderr: () => undefined, stdin: async () => "", env: {}, isTTY: false, bin: app.bins.cli });
+    expect(served).toBe(0);
+  });
+});

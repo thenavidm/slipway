@@ -113,6 +113,7 @@ export class Guard {
 }
 
 /** Why a tool needs confirming, in the words a refusal and an approval form both use. */
-export function consequence(tool: Pick<Tool, "risk">): string {
+export function consequence(tool: Pick<Tool, "risk" | "consequence">): string {
+  if (tool.consequence) return tool.consequence;
   return tool.risk === "destructive" ? "is public or cannot be undone" : "has an effect that cannot be taken back";
 }
