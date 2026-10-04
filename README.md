@@ -124,7 +124,7 @@ npm install --save-dev ajv
 
 ## 2. Build a server
 
-A server is three files.
+A server is three files, plus a one-line fourth for npx.
 
 **`src/tools.ts`** says what the server can do. `toolkit<Context>()` binds the context type once, so every handler gets `ctx.api` typed:
 
@@ -179,11 +179,20 @@ import { app } from "./app.js";
 await app.main();
 ```
 
+**`src/npx.ts`** is what `npx -y @you/notes-mcp-cli` runs:
+
+```ts
+#!/usr/bin/env node
+import "./index.js";
+```
+
 ```json
 {
-  "bin": { "notes-mcp": "dist/index.js", "notes-cli": "dist/index.js" }
+  "bin": { "notes-mcp": "dist/index.js", "notes-cli": "dist/index.js", "notes-mcp-cli": "dist/npx.js" }
 }
 ```
+
+npx picks a binary named after the package only when the binaries point to different files. When they all share one file it starts whichever one the registry lists first, and the registry does not keep the order they were published in, so a client could get the CLI's command list instead of a server. The fourth binary, on its own file, is picked every time, and `slipway check` fails a package without it.
 
 `notes-mcp` with no arguments serves MCP over stdio and stays silent on stdout. `notes-cli` with no arguments lists the commands. Any argument on either binary is a command, so a typo is reported instead of starting a server that waits on stdin.
 

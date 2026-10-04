@@ -2,6 +2,10 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.3, 2026-10-04: npx picks the server by name
+
+- **`slipway check` matches npm's real rule.** npx picks a binary named after the package only when the binaries point to different files. When they share one file it starts whichever one the registry lists first, and the registry does not keep the published order: 23 published servers listed their MCP binary first and still started the CLI. 0.1.2's order check could not catch that. The check now requires a binary named after the package on a file of its own, and the README shows the one-line `src/npx.ts` it runs.
+
 ## 0.1.2, 2026-10-04: clients always start the server
 
 - **`slipway check` fails a package whose `npx -y` default is the CLI.** With several binaries on one file, npx starts the first one listed. A package that lists its CLI first hands every client launched with `npx -y <package>` the command list instead of a server. The check reads `package.json` and names the fix: list the MCP binary first.

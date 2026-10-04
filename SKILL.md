@@ -23,8 +23,9 @@ Run `npm ls @thenavidm/slipway` in the repo. If it does not list a version, STOP
 | `src/tools.ts` | The tools, from `toolkit<Context>().defineTool` | One `defineTool` per action |
 | `src/app.ts` | `export const app = slipway({...})` | Describes only. Never calls `main()`, so checks and tests can import it |
 | `src/index.ts` | `await app.main()` | The only file that starts anything. Both binaries point at it |
+| `src/npx.ts` | `import "./index.js";` | What `npx -y <package>` runs. Its binary is named after the package |
 
-`package.json` declares both binaries on the same file: `"<name>-mcp"` and `"<name>-cli"`, both `dist/index.js`.
+`package.json` declares `"<name>-mcp"` and `"<name>-cli"` on `dist/index.js`, and a third binary named after the package (`"<name>-mcp-cli"`) on `dist/npx.js`. npx only picks a binary by name when they point to different files; otherwise it takes whichever one the registry lists first, which may be the CLI.
 
 ## Defining a tool
 

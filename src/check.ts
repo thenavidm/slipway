@@ -260,9 +260,10 @@ async function checkParityIn(
 
 /**
  * `npx -y <package>` is how most people install a server, and npx starts one
- * binary without being told which. With several binaries on one file it runs
- * the first listed, so a package that lists its CLI first hands every client
- * the command list instead of a server.
+ * binary without being told which. npm's rule: when every binary points to
+ * the same file, it starts whichever one the registry lists first, and the
+ * registry does not keep the order they were published in. Only a binary
+ * named after the package, on a file of its own, is picked every time.
  */
 function checkBins(app: App, file: string, add: (level: Finding["level"], check: string, message: string, tool?: string) => void) {
   let pkg: { name?: string; bin?: string | Record<string, string> };
@@ -277,18 +278,18 @@ function checkBins(app: App, file: string, add: (level: Finding["level"], check:
   }
   if (!pkg.bin || typeof pkg.bin === "string") return;
   const bins = pkg.bin;
-  const keys = Object.keys(bins);
-  if (!keys.includes(app.bins.mcp)) {
+  if (!(app.bins.mcp in bins)) {
     add("error", "install", `package.json has no ${app.bins.mcp} binary, so clients cannot start the server by name.`);
     return;
   }
   const unscoped = (pkg.name ?? "").split("/").pop() ?? "";
-  // npx's own order: a binary named after the package, then the only file all binaries share.
-  const chosen = keys.includes(unscoped) ? unscoped : new Set(Object.values(bins)).size === 1 ? keys[0] : undefined;
-  if (chosen === undefined) {
-    add("error", "install", `npx -y ${pkg.name} cannot choose between ${keys.join(" and ")}. Point them at one file and list ${app.bins.mcp} first.`);
-  } else if (chosen !== app.bins.mcp && bins[chosen] === bins[app.bins.mcp] && chosen === app.bins.cli) {
-    add("error", "install", `npx -y ${pkg.name} starts ${chosen}, the CLI, so a client launched that way gets the command list instead of a server. List ${app.bins.mcp} first in package.json's bin.`);
+  const fix = `Add "${unscoped}": "dist/npx.js" to bin, where src/npx.ts holds only: import "./index.js";`;
+  if (new Set(Object.values(bins)).size === 1) {
+    add("error", "install", `Every binary runs the same file, so npx -y ${pkg.name} starts whichever one the registry lists first, which may be ${app.bins.cli}. ${fix}`);
+  } else if (!(unscoped in bins)) {
+    add("error", "install", `npx -y ${pkg.name} cannot choose between ${Object.keys(bins).join(", ")}. ${fix}`);
+  } else if (unscoped === app.bins.cli || unscoped.startsWith(app.bins.cli)) {
+    add("error", "install", `npx -y ${pkg.name} starts ${unscoped}, which runs as the CLI. Name the package so it does not start with ${app.bins.cli}.`);
   }
 }
 
