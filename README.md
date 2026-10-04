@@ -383,7 +383,7 @@ Override any operation's name or risk with `names` and `risk`, keep a subset wit
 | `<cli> <command> --help` | Its flags, choices, defaults, examples and risk |
 | `<cli> which <words>` | Find the command for a task, by what it does |
 | `<cli> schema <command>` | The JSON Schema an MCP client receives. `--output` for the result's |
-| `<cli> agent-context` | Commands, flags, risk, examples, exit codes and settings as JSON. `--brief` for names only |
+| `<cli> agent-context` | Commands, flags, risk, examples, exit codes and settings as JSON. `--brief` for just the commands, which ones write or need `--confirm`, and the exit codes |
 | `<cli> doctor` | Check the setup. `--network` also calls the service |
 | `<cli> login` | How to connect an account |
 | `<cli> install <client>` | Add the MCP server to a client. See [Add it to a client](#10-add-it-to-a-client) |

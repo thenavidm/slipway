@@ -9,6 +9,7 @@ What changed in Slipway, newest first.
 - **`--version` prints the bare version.** It printed `notes 1.0.0 (slipway 0.1.3)`, where every server built before Slipway prints `1.0.0`, so a script comparing versions broke on migration. `agent-context` still names the framework and its version.
 - **`structuredContent` only for a tool with an output schema.** An object result went out as JSON text and again as `structuredContent`. Codex hands a model the structured copy in place of the text, as one escaped string, so on a measured Teachable call it read 211 more tokens than for the same JSON as text, and the copy also hid a `render` text or an image. An untyped result is now text alone; a typed one still carries its validated copy. `resultData()` in `@thenavidm/slipway/testing` reads either.
 - **A built-in command explains itself with `--help`.** `install --help` failed asking for a client; it now lists the clients and flags. Every other built-in prints the general help instead of running.
+- **Shorter CLI screens, measured in tokens.** An agent pays for every line it reads. On Teachable's 26 commands, counted with OpenAI's tokenizer: the command list went from 413 tokens to 335, a command's `--help` from 368 to 230, the general help from 802 to 639, and `agent-context --brief` from 2,200 to 912. A command's help now shows only the output flags that command can use, and the command list names the setting that turns hidden commands on.
 
 ## 0.1.3, 2026-10-04: npx picks the server by name
 

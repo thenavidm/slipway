@@ -1,10 +1,13 @@
 /**
  * What a person sees before they know what to type.
+ *
+ * An agent reads this too, and pays for every token of it, so each screen
+ * shows what applies and points to the rest instead of repeating it.
  */
 
 import type { App } from "../app.js";
 import { EXIT } from "../errors.js";
-import { policyEnvNames, riskMark } from "../policy.js";
+import { policyEnvNames, riskMark, visibility } from "../policy.js";
 import { firstSentence } from "../search.js";
 import type { Tool } from "../tool.js";
 import { flagsFor, type Flag } from "./flags.js";
@@ -36,13 +39,46 @@ function line(left: string, help: string): string[] {
 }
 
 function riskWords(tool: Tool): string {
-  const base = tool.risk === "read" ? "read only" : tool.risk === "write" ? "writes, reversible" : "public or irreversible";
-  return tool.requireConfirm ? `${base}, runs only with --confirm` : base;
+  return tool.risk === "read" ? "read only" : tool.risk === "write" ? "writes, reversible" : "public or irreversible";
 }
 
-export function renderList(app: App, tools: readonly Tool[], bin: string): string {
+/** The output flags a command can use: the four every command takes, and those its kind adds. */
+function outputFlagsFor(tool: Tool): Array<[string, string]> {
+  const wanted = new Set(["--json", "--compact", "--select <a,b.c>", "--agent"]);
+  if (tool.risk !== "read") wanted.add("--dry-run");
+  if (tool.cache) wanted.add("--refresh");
+  if (tool.paginate || tool.sync) for (const flag of ["--jsonl", "--csv / --tsv", "--quiet"]) wanted.add(flag);
+  return GLOBAL_FLAGS.filter(([flag]) => wanted.has(flag));
+}
+
+/** Why some commands are not listed, and the setting that lists them. */
+function hiddenNote(app: App, env: NodeJS.ProcessEnv): string[] {
+  const policy = app.policy(env);
+  const names = policyEnvNames(app.envPrefix);
+  const off = new Set<string>();
+  let byToolset = 0;
+  let byReadOnly = 0;
+  for (const tool of app.allTools) {
+    const seen = visibility(tool, policy);
+    if (seen.visible) continue;
+    if (seen.reason === "read-only") byReadOnly += 1;
+    else {
+      byToolset += 1;
+      for (const tag of tool.tags) if (policy.toolsets === "all" || !policy.toolsets.has(tag)) off.add(tag);
+    }
+  }
+  const lines: string[] = [];
+  if (byToolset) {
+    const sets = [...off].sort();
+    lines.push(`  ${byToolset} more ${byToolset === 1 ? "command is" : "commands are"} in ${sets.join(", ")}, off: ${names.toolsets}=${sets.join(",")} turns ${byToolset === 1 ? "it" : "them"} on.`);
+  }
+  if (byReadOnly) lines.push(`  ${byReadOnly} ${byReadOnly === 1 ? "write is" : "writes are"} hidden by ${names.readOnly}=1.`);
+  return lines.length ? [...lines, ``] : [];
+}
+
+export function renderList(app: App, tools: readonly Tool[], bin: string, env: NodeJS.ProcessEnv = process.env): string {
   const width = Math.max(10, ...tools.map((tool) => tool.command.length)) + 2;
-  const lines = [``, `${app.title} ${app.version}${app.description ? `: ${app.description}` : ""}`, ``];
+  const lines = [``, `${bin} ${app.version}: ${tools.length} ${tools.length === 1 ? "command" : "commands"}`];
   const toolsets = app.definition.toolsets ?? {};
 
   const groups = new Map<string, Tool[]>();
@@ -53,7 +89,7 @@ export function renderList(app: App, tools: readonly Tool[], bin: string): strin
   const ordered = [...groups.entries()].sort(([a], [b]) => (a === "" ? -1 : b === "" ? 1 : a.localeCompare(b)));
   const grouped = ordered.length > 1 || (ordered[0]?.[0] ?? "") !== "";
 
-  lines.push(`Commands (${tools.length})`);
+  if (!grouped) lines.push(``);
   for (const [group, members] of ordered) {
     if (grouped) lines.push(``, `  ${group || "general"}${group && toolsets[group] ? `: ${toolsets[group]}` : ""}`);
     for (const tool of members) lines.push(`  ${riskMark(tool.risk)} ${tool.command.padEnd(width)}${tool.title}`);
@@ -62,19 +98,12 @@ export function renderList(app: App, tools: readonly Tool[], bin: string): strin
     ``,
     `  * writes    ! public or irreversible`,
     ``,
-    `  ${bin} <command> --help       what a command takes, with examples`,
-    `  ${bin} which <words>          find the command for a task`,
-    `  ${bin} schema <command>       the JSON Schema an MCP client sees`,
-    `  ${bin} agent-context          everything above, as JSON for an agent`,
-    `  ${bin} doctor                 check the setup`,
-    `  ${bin} install <client>       add it to an MCP client: codex, claude-code, cursor…`,
+    `  ${bin} <command> --help    what one takes, with examples`,
+    `  ${bin} which <words>       find the command for a task`,
+    `  ${bin} --help              flags, settings and setup`,
     ``,
+    ...hiddenNote(app, env),
   );
-  const hidden = app.allTools.length - tools.length;
-  if (hidden > 0) {
-    const names = policyEnvNames(app.envPrefix);
-    lines.push(`  ${hidden} more ${hidden === 1 ? "command is" : "commands are"} off: see ${names.readOnly} and ${names.toolsets} in \`${bin} help\`.`, ``);
-  }
   return lines.join("\n");
 }
 
@@ -124,9 +153,10 @@ export function renderToolHelp(tool: Tool, bin: string): string {
     .filter(Boolean)
     .join(" ");
 
-  const lines = [``, `${tool.title}`, ``, tool.description, ``, `Usage:`, `  ${usage}`, ``];
-  const describe = (list: Flag[], heading: string) => {
-    if (!list.length) return;
+  // The title is already on the command list; the description says more.
+  const lines = [``, tool.description, ``, `Usage:`, `  ${usage}`, ``];
+  const describe = (list: Flag[], heading: string, after: string[] = []) => {
+    if (!list.length && !after.length) return;
     lines.push(`${heading}:`);
     for (const flag of list) {
       const extra = [flag.repeatable ? "Repeatable." : "", flag.default !== undefined ? `Default ${JSON.stringify(flag.default)}.` : ""]
@@ -134,14 +164,11 @@ export function renderToolHelp(tool: Tool, bin: string): string {
         .join(" ");
       lines.push(...line(`  ${flag.flag}${placeholder(flag)}`, [flag.help, extra].filter(Boolean).join(" ")));
     }
-    lines.push(``);
+    lines.push(...after, ``);
   };
-  describe(required, "Required");
+  describe(required, "Required", tool.requireConfirm ? line("  --confirm", "it runs only with this; --agent never adds it") : []);
   describe(optional, "Options");
 
-  if (tool.requireConfirm) {
-    lines.push(`Safety:`, ...line("  --confirm", "required: this runs only when you mean it"), ``);
-  }
   if (tool.paginate) {
     lines.push(`Pages:`, ...line("  --all", "follow every page and print all items"), ...line("  --max-items <n>", "stop after this many items"), ``);
   }
@@ -160,68 +187,66 @@ export function renderToolHelp(tool: Tool, bin: string): string {
     for (const example of tool.examples) lines.push(`  # ${example.description}`, `  ${exampleCommand(bin, tool, example.args)}`, ``);
   }
   lines.push(`Output:`);
-  for (const [flag, help] of GLOBAL_FLAGS) lines.push(...line(`  ${flag}`, help));
+  for (const [flag, help] of outputFlagsFor(tool)) lines.push(...line(`  ${flag}`, help));
   lines.push(``, `Risk: ${riskWords(tool)}`, ``);
   return lines.join("\n");
 }
 
 export function renderGeneralHelp(app: App, bin: string): string {
   const names = policyEnvNames(app.envPrefix);
+  const cache = app.allTools.some((tool) => tool.cache);
+  const sync = app.allTools.some((tool) => tool.sync);
+  const jobs = app.allTools.some((tool) => tool.job);
+  const commands: Array<[string, string]> = [
+    [bin, "list the commands"],
+    [`${bin} <command> --help`, "what one takes, with examples"],
+    [`${bin} which <words>`, "find the command for a task"],
+    [`${bin} schema <command>`, "its JSON Schema; --output for the result's"],
+    [`${bin} agent-context`, "all of this as JSON; --brief for less"],
+    [`${bin} doctor [--network]`, "check the setup and say what is wrong"],
+    [`${bin} login`, "how to connect an account"],
+    [`${bin} install <client>`, "add the server to claude-code, codex, claude-desktop, cursor, vscode or gemini"],
+    [`${bin} completion <shell>`, "tab completion for bash, zsh or fish"],
+    ...(cache || sync ? ([[`${bin} data`, "what is kept on this machine; data clear [<command>] deletes it"]] as Array<[string, string]>) : []),
+    ...(sync
+      ? ([
+          [`${bin} data sync <command>`, "copy every page of a list to this machine"],
+          [`${bin} data search <words>`, "search synced records offline (--in <command>)"],
+          [`${bin} data sql "<select>"`, "query local data with read-only SQL"],
+        ] as Array<[string, string]>)
+      : []),
+    [app.bins.mcp, "the MCP server over stdio; --http [--port N] for HTTP"],
+  ];
+  const settings: Array<[string, string]> = [
+    ...(app.definition.settings ?? []).map((setting): [string, string] => [setting.env, setting.description]),
+    [`${names.readOnly}=1`, "hide and refuse every write"],
+    [`${names.allowDestructive}=0`, "keep writes, refuse the irreversible ones"],
+    [`${names.toolsets}=a,b`, "only these toolsets, or all"],
+    [`${names.surface}=search`, "MCP serves three tools that find, describe and run the rest"],
+    [`${names.auditLog}=<file>`, "log every attempted write to this file"],
+    [`${names.toolTimeoutMs}=<ms>`, "give up on any tool after this long"],
+    [`${names.confirm}=model`, "confirm: true alone confirms, for an agent with no person to ask"],
+    ...(cache ? ([[`${names.cache}=0`, "never answer from the local cache"]] as Array<[string, string]>) : []),
+    ...(cache || sync ? ([[`${names.dataDir}=<dir>`, "keep local data in this folder"]] as Array<[string, string]>) : []),
+  ];
+  // Flags that cannot apply here (jobs, the cache) are left out; agent-context lists every one.
+  const flags = GLOBAL_FLAGS.map(([flag]) => flag).filter(
+    (flag) => flag !== "--agent" && (flag !== "--wait" || jobs) && (flag !== "--refresh" || cache),
+  );
+  const width = Math.max(...[...commands, ...settings].map(([left]) => left.length)) + 3;
+  const row = ([left, help]: [string, string]) => `  ${left.padEnd(width)}${help}`;
   const lines = [
     ``,
     `${app.title} ${app.version}${app.description ? `: ${app.description}` : ""}`,
     ``,
-    `Usage:`,
-    `  ${app.bins.mcp}                      run the MCP server over stdio (what an MCP client launches)`,
-    `  ${app.bins.mcp} --http [--port N]    run it over HTTP`,
-    `  ${bin}                      list every command`,
-    `  ${bin} <command> [flags]    run one`,
+    ...commands.map(row),
     ``,
-    `Commands:`,
-    ...line("  <command> --help", "what a command takes, with examples"),
-    ...line("  which <words>", "find the command for a task"),
-    ...line("  schema <command>", "the JSON Schema an MCP client sees (--output for the result's)"),
-    ...line("  agent-context", "commands, flags, risk, exit codes and settings as JSON"),
-    ...line("  doctor [--network]", "check the setup and say what is wrong"),
-    ...line("  login", "how to connect an account"),
-    ...line("  install <client>", "add this server to claude-code, codex, claude-desktop, cursor, vscode or gemini"),
-    ...line("  completion <shell>", "tab completion for bash, zsh or fish"),
-    ...line("  version", "print the version"),
+    `Flags: ${flags.join(", ")}, and --agent for compact JSON with no prompts, which never confirms a write.`,
     ``,
-    ...(app.allTools.some((tool) => tool.cache || tool.sync)
-      ? [
-          `Local data:`,
-          ...line("  data", "what is kept on this machine, and where"),
-          ...(app.allTools.some((tool) => tool.sync)
-            ? [
-                ...line("  data sync <command>", "copy every page of a list to this machine"),
-                ...line("  data search <words>", "search synced records offline (--in <command>)"),
-                ...line('  data sql "<select>"', "query local data with read-only SQL"),
-              ]
-            : []),
-          ...line("  data clear [<command>]", "delete this account's local data (--cache for cached results only)"),
-          ``,
-        ]
-      : []),
-    `Output flags, on any command:`,
-    ...GLOBAL_FLAGS.flatMap(([flag, help]) => line(`  ${flag}`, help)),
-    ``,
-    ...(app.definition.settings?.length
-      ? [`${app.title} settings:`, ...app.definition.settings.flatMap((setting) => line(`  ${setting.env}`, setting.description)), ``]
-      : []),
     `Settings:`,
-    ...line(`  ${names.readOnly}=1`, "hide and refuse every write"),
-    ...line(`  ${names.allowDestructive}=0`, "keep writes, refuse the irreversible ones"),
-    ...line(`  ${names.toolsets}=a,b`, "only these toolsets (or all)"),
-    ...line(`  ${names.surface}=search`, "MCP lists three tools that find, describe and run the rest"),
-    ...line(`  ${names.auditLog}=<file>`, "append every attempted write to this file"),
-    ...line(`  ${names.toolTimeoutMs}=<ms>`, "give up on any tool after this long"),
-    ...line(`  ${names.confirm}=model`, "let confirm: true alone confirm, for an agent with no person to ask"),
-    ...(app.allTools.some((tool) => tool.cache) ? line(`  ${names.cache}=0`, "never answer from the local cache") : []),
-    ...(app.allTools.some((tool) => tool.cache || tool.sync) ? line(`  ${names.dataDir}=<dir>`, "keep local data in this folder") : []),
+    ...settings.map(row),
     ``,
-    `Exit codes:`,
-    `  ${EXIT.ok} ok   ${EXIT.usage} usage or refused write   ${EXIT.notFound} not found   ${EXIT.auth} auth   ${EXIT.api} API   ${EXIT.rateLimited} rate limited   ${EXIT.notConfigured} nothing configured`,
+    `Exit codes: ${EXIT.ok} ok, ${EXIT.error} unexpected error, ${EXIT.usage} usage or refused write, ${EXIT.notFound} not found, ${EXIT.auth} auth, ${EXIT.api} API, ${EXIT.rateLimited} rate limited, ${EXIT.notConfigured} nothing configured`,
     ``,
   ];
   if (app.definition.links?.repository) lines.push(app.definition.links.repository, ``);

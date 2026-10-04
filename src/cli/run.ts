@@ -159,7 +159,7 @@ export async function runCli(app: App, argv: readonly string[], partial: Partial
     if (command === undefined) {
       if (globals.version) return printVersion(app, io);
       if (globals.help) return print(io, renderGeneralHelp(app, io.bin));
-      return print(io, renderList(app, app.tools(io.env), io.bin));
+      return print(io, renderList(app, app.tools(io.env), io.bin, io.env));
     }
 
     if (builtin) return await runBuiltin(app, io, command, rest, globals);
@@ -214,7 +214,7 @@ async function runBuiltin(app: App, io: CliIO, command: string, rest: string[], 
   const target = rest.find((token) => !token.startsWith("-"));
   switch (command) {
     case "tools":
-      return print(io, renderList(app, app.tools(io.env), io.bin));
+      return print(io, renderList(app, app.tools(io.env), io.bin, io.env));
     case "version":
       return printVersion(app, io);
     case "help": {

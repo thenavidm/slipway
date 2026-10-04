@@ -47,6 +47,32 @@ describe("CLI: discovery", () => {
     expect(run.stdout.split("\n")[0]).toContain("delete-note");
   });
 
+  it("shows each command only the output flags it can use, since an agent pays for every line", async () => {
+    const read = (await cli(createApp(), ["get-note", "--help"])).stdout;
+    expect(read).toContain("--select");
+    for (const flag of ["--wait", "--refresh", "--dry-run", "--jsonl", "--timeout"]) expect(read).not.toContain(flag);
+    expect((await cli(createApp(), ["list-notes", "--help"])).stdout).toContain("--jsonl");
+    const write = (await cli(createApp(), ["delete-note", "--help"])).stdout;
+    expect(write).toContain("--dry-run");
+    expect(write).toContain("--agent never adds it");
+  });
+
+  it("says why commands are hidden and which setting lists them", async () => {
+    const off = (await cli(createApp(), [], { env: { NOTES_TOOLSETS: "none" } })).stdout;
+    expect(off).toContain("1 more command is in admin, off: NOTES_TOOLSETS=admin turns it on.");
+    const readOnly = (await cli(createApp(), [], { env: { NOTES_READ_ONLY: "1" } })).stdout;
+    expect(readOnly).toMatch(/\d+ writes are hidden by NOTES_READ_ONLY=1\./);
+  });
+
+  it("keeps agent-context --brief to what picks a command", async () => {
+    const brief = JSON.parse((await cli(createApp(), ["agent-context", "--brief"])).stdout);
+    expect(brief.settings).toBeUndefined();
+    expect(brief.global_flags).toBeUndefined();
+    expect(brief.exit_codes[10]).toBe("nothing configured");
+    expect(brief.commands.find((command: { command: string }) => command.command === "delete-note")).toMatchObject({ risk: "destructive", requires_confirm: true });
+    expect(brief.commands.find((command: { command: string }) => command.command === "get-note")).toEqual({ command: "get-note", title: expect.any(String) });
+  });
+
   it("suggests the closest command for a typo and exits 2", async () => {
     const run = await cli(createApp(), ["get-nte", "1"]);
     expect(run.code).toBe(2);

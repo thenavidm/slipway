@@ -32,6 +32,25 @@ export function agentContext(app: App, env: NodeJS.ProcessEnv, bin: string, opti
   const policy = app.policy(env);
   const names = policyEnvNames(app.envPrefix);
   const tools = app.tools(env);
+  const hidden = app.allTools.length - tools.length;
+  const note = "--agent never confirms a write. A command that requires --confirm runs only when it is passed explicitly.";
+  if (options.brief) {
+    // Enough to pick a command: what each one is, and which write or need --confirm. The full read adds flags and settings.
+    return {
+      name: app.name,
+      version: app.version,
+      ...(app.description ? { description: app.description } : {}),
+      usage: { run: `${bin} <command> [flags]`, help: `${bin} <command> --help`, note },
+      exit_codes: EXIT_MEANINGS,
+      ...(hidden ? { hidden_commands: hidden, ...(app.definition.toolsets ? { toolsets: app.definition.toolsets } : {}) } : {}),
+      commands: tools.map((tool) => ({
+        command: tool.command,
+        title: tool.title,
+        ...(tool.risk !== "read" ? { risk: tool.risk } : {}),
+        ...(tool.requireConfirm ? { requires_confirm: true } : {}),
+      })),
+    };
+  }
   return {
     name: app.name,
     title: app.title,
@@ -44,7 +63,7 @@ export function agentContext(app: App, env: NodeJS.ProcessEnv, bin: string, opti
       help: `${bin} <command> --help`,
       agent_mode: "--agent",
       confirm_flag: "--confirm",
-      note: "--agent never confirms a write. A command that requires --confirm runs only when it is passed explicitly.",
+      note,
     },
     exit_codes: EXIT_MEANINGS,
     global_flags: GLOBAL_FLAGS.map(([flag, description]) => ({ flag, description })),
@@ -64,38 +83,34 @@ export function agentContext(app: App, env: NodeJS.ProcessEnv, bin: string, opti
       { env: names.confirm, value: policy.confirm, description: "who confirms a confirmed call over MCP: human asks a person where the client can, model accepts confirm: true" },
     ],
     ...(app.definition.toolsets ? { toolsets: app.definition.toolsets } : {}),
-    hidden_commands: app.allTools.length - tools.length,
-    commands: tools.map((tool) =>
-      options.brief
-        ? { command: tool.command, title: tool.title, risk: tool.risk, requires_confirm: tool.requireConfirm }
-        : {
-            command: tool.command,
-            tool: tool.name,
-            title: tool.title,
-            description: tool.description,
-            risk: tool.risk,
-            requires_confirm: tool.requireConfirm,
-            ...(tool.tags.length ? { toolsets: tool.tags } : {}),
-            ...(tool.positional.length ? { positional: tool.positional } : {}),
-            flags: flagsFor(tool.jsonSchema)
-              .filter((flag) => flag.key !== "confirm")
-              .map((flag) => ({
-                flag: flag.flag,
-                type: flag.kind,
-                required: flag.required,
-                ...(flag.repeatable ? { repeatable: true } : {}),
-                ...(flag.choices ? { choices: flag.choices } : {}),
-                ...(flag.default !== undefined ? { default: flag.default } : {}),
-                ...(flag.help ? { description: flag.help } : {}),
-              })),
-            ...(tool.output ? { output_schema: outputJsonSchema(tool.output) } : {}),
-            ...(tool.paginate ? { paginates: true } : {}),
-            ...(tool.job && !tool.statusOf ? { job: { status_command: `${tool.command}-status`, background: "background" in tool.job } } : {}),
-            ...(tool.statusOf ? { checks_jobs_of: tool.statusOf.replace(/_/g, "-") } : {}),
-            ...(tool.examples.length
-              ? { examples: tool.examples.map((example) => ({ description: example.description, command: exampleCommand(bin, tool, example.args) })) }
-              : {}),
-          },
-    ),
+    hidden_commands: hidden,
+    commands: tools.map((tool) => ({
+      command: tool.command,
+      tool: tool.name,
+      title: tool.title,
+      description: tool.description,
+      risk: tool.risk,
+      requires_confirm: tool.requireConfirm,
+      ...(tool.tags.length ? { toolsets: tool.tags } : {}),
+      ...(tool.positional.length ? { positional: tool.positional } : {}),
+      flags: flagsFor(tool.jsonSchema)
+        .filter((flag) => flag.key !== "confirm")
+        .map((flag) => ({
+          flag: flag.flag,
+          type: flag.kind,
+          required: flag.required,
+          ...(flag.repeatable ? { repeatable: true } : {}),
+          ...(flag.choices ? { choices: flag.choices } : {}),
+          ...(flag.default !== undefined ? { default: flag.default } : {}),
+          ...(flag.help ? { description: flag.help } : {}),
+        })),
+      ...(tool.output ? { output_schema: outputJsonSchema(tool.output) } : {}),
+      ...(tool.paginate ? { paginates: true } : {}),
+      ...(tool.job && !tool.statusOf ? { job: { status_command: `${tool.command}-status`, background: "background" in tool.job } } : {}),
+      ...(tool.statusOf ? { checks_jobs_of: tool.statusOf.replace(/_/g, "-") } : {}),
+      ...(tool.examples.length
+        ? { examples: tool.examples.map((example) => ({ description: example.description, command: exampleCommand(bin, tool, example.args) })) }
+        : {}),
+    })),
   };
 }
