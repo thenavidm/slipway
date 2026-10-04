@@ -108,6 +108,21 @@ describe("slipway check", () => {
     expect(report.ok).toBe(false);
   });
 
+  it("refuses a terminal command named like a built-in or a tool", async () => {
+    const app = slipway({
+      name: "clash",
+      version: "0.0.1",
+      context: () => ({}),
+      tools: [defineTool({ name: "get_thing", title: "Get a thing", description: "Get one thing by its id, from the account.", input: z.object({ id: z.number() }), risk: "read", handler: () => ({}) })],
+      commands: [
+        { name: "doctor", help: "Shadows the built-in.", run: () => 0 },
+        { name: "get-thing", help: "Shadows the tool.", run: () => 0 },
+      ],
+    });
+    const report = await checkApp(app, { env: {} });
+    expect(report.findings.filter((finding) => finding.check === "names" && finding.level === "error")).toHaveLength(2);
+  });
+
   it("flags schemas that are too large and definitions sent twice", async () => {
     const huge = { type: "object", properties: Object.fromEntries(Array.from({ length: 400 }, (_, i) => [`field_${i}`, { type: "string", description: "x".repeat(60) }])) };
     const block = { type: "object", properties: { a: { type: "string" } } };

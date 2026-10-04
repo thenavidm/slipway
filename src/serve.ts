@@ -49,7 +49,7 @@ export type HttpOptions = { host: string; port: number; token?: string };
 export function httpOptions(app: App, env: NodeJS.ProcessEnv, argv: string[]): HttpOptions {
   const at = argv.findIndex((token) => token === "--port" || token.startsWith("--port="));
   const raw = at === -1 ? env[`${app.envPrefix}_HTTP_PORT`] : argv[at]!.includes("=") ? argv[at]!.split("=")[1] : argv[at + 1];
-  const port = Number(raw ?? 8787);
+  const port = Number(raw ?? app.definition.httpPort ?? 8787);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new UsageError(`--port expects a port number, got '${raw}'.`);
   return {
     host: env[`${app.envPrefix}_HTTP_HOST`]?.trim() || "127.0.0.1",

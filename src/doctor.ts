@@ -76,14 +76,15 @@ export async function runDoctor(app: App, io: CliIO, options: { network: boolean
     });
   }
 
+  const network = options.network || app.definition.doctorNetwork === true;
   if (ctx !== undefined && app.definition.doctor) {
     try {
-      checks.push(...(await app.definition.doctor(ctx as never, { network: options.network })));
+      checks.push(...(await app.definition.doctor(ctx as never, { network })));
     } catch (error) {
       checks.push({ name: "Service check", ok: false, detail: app.secrets.redact((error as Error)?.message ?? String(error)) });
     }
   }
-  if (!options.network && app.definition.doctor) {
+  if (!network && app.definition.doctor) {
     checks.push({ name: "Network", ok: true, warn: true, detail: "not checked; run with --network to call the service" });
   }
 

@@ -118,6 +118,23 @@ export const CONFIRM_DESCRIPTION = "Set true only when the user asked for exactl
 export const WAIT_DESCRIPTION = "Seconds to wait for the job to finish before returning it to check later.";
 
 /**
+ * Zod 4 gives every whole number the safe-integer bounds, `maximum:
+ * 9007199254740991` and its negative, unless the schema sets its own. They say
+ * nothing a client can use, so they are left out of what it receives.
+ * Validation still runs on the schema itself.
+ */
+function withoutSafeIntegerBounds(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(withoutSafeIntegerBounds);
+  if (node === null || typeof node !== "object") return node;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(node)) {
+    if ((key === "maximum" && value === Number.MAX_SAFE_INTEGER) || (key === "minimum" && value === Number.MIN_SAFE_INTEGER)) continue;
+    out[key] = withoutSafeIntegerBounds(value);
+  }
+  return out;
+}
+
+/**
  * A schema as clients receive it, without the `$schema` line that names its
  * dialect. A client reads JSON Schema 2020-12 when no dialect is named, so
  * the line only adds bytes to every tool in every listing.
@@ -125,9 +142,8 @@ export const WAIT_DESCRIPTION = "Seconds to wait for the job to finish before re
 export function advertised<I, O>(schema: Schema<I, O>): Schema<I, O> {
   const std = schema["~standard"];
   const plain = (json: JsonSchema): JsonSchema => {
-    if (!("$schema" in json)) return json;
     const { $schema: _dialect, ...rest } = json;
-    return rest;
+    return withoutSafeIntegerBounds(rest) as JsonSchema;
   };
   return {
     "~standard": {

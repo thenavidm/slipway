@@ -388,10 +388,11 @@ Override any operation's name or risk with `names` and `risk`, keep a subset wit
 | `<cli> which <words>` | Find the command for a task, by what it does |
 | `<cli> schema <command>` | The JSON Schema an MCP client receives. `--output` for the result's |
 | `<cli> agent-context` | Commands, flags, risk, examples, exit codes and settings as JSON. `--brief` for just the commands, which ones write or need `--confirm`, and the exit codes |
-| `<cli> doctor` | Check the setup. `--network` also calls the service |
-| `<cli> login` | How to connect an account |
+| `<cli> doctor` | Check the setup. `--network` also calls the service, which an app with `doctorNetwork` does every time |
+| `<cli> login` | How to connect an account: printed steps, or the app's own sign-in flow with the words after `login` |
 | `<cli> install <client>` | Add the MCP server to a client. See [Add it to a client](#10-add-it-to-a-client) |
 | `<cli> data` | The local cache and synced lists: `sync`, `search`, `sql`, `clear` |
+| `<cli> <command>` from `commands` | A terminal command the app adds, such as `logout`. Listed in help and `agent-context`, never sent to an MCP client |
 | `<cli> completion bash` | Tab completion for bash, zsh or fish |
 
 Flags come from the schema: `--flag value`, `--flag=value`, the underscore spelling, `--no-flag` for a boolean, repeated or comma-separated lists of numbers and choices, and JSON or `@file.json` for an object. `--input` takes every argument as one JSON object, from the flag, a file or stdin, and flags on the same line override it.
@@ -426,7 +427,7 @@ Errors are JSON on stderr, always, with `error`, `code` and a `hint` that names 
 | Run | Serves |
 |---|---|
 | `<mcp>` | MCP over stdio, what a client launches |
-| `<mcp> --http [--port 8787]` | Streamable HTTP at `/mcp`, with `/health` |
+| `<mcp> --http [--port 8787]` | Streamable HTTP at `/mcp`, with `/health`. The app's `httpPort` replaces 8787, for a server that shipped another default |
 
 HTTP binds `127.0.0.1` and checks the Host header, so a web page cannot reach it through a name that resolves to localhost. It refuses to listen on any other address without `<PREFIX>_HTTP_TOKEN`, because anyone who reached the port would act as your account.
 
@@ -457,7 +458,7 @@ notes-cli install cursor --dry-run
 | `vscode` | `.vscode/mcp.json` | VS Code asks for each credential once and stores it securely |
 | `gemini` | `~/.gemini/settings.json`, or `.gemini/settings.json` | `${NAME}` references, which Gemini CLI needs to pass anything named like a key |
 
-A published server is started with `npx --package=<package>@latest <name>-mcp`, so a client picks up every release on its next start, with Codex's startup timeout raised for the download. The binary is named, because npx alone starts whichever binary a package lists first. Without `package`, or with `--local`, the client starts this copy on disk. Installing again updates the entry in place: anything you added to it by hand stays, and the old file is kept as a backup.
+A published server is started with `npx --package=<package>@latest <name>-mcp`, so a client picks up every release on its next start, with Codex's startup timeout raised for the download. The binary is named, because npx alone starts whichever binary a package lists first. Without `package`, or with `--local`, the client starts this copy on disk. Installing again updates the entry in place: anything you added to it by hand stays, and the old file is kept as a backup. A setting marked `tuning: true`, such as a timeout with a working default, stays out of the entry, so it carries only what connects an account.
 
 ## 11. Large catalogs
 
@@ -539,7 +540,7 @@ const mcp = await connect(app, { era: "modern", elicit: () => ({ action: "accept
 
 ## Environment variables
 
-Every server reads these, under its own prefix: the app name in capitals, `NOTES` for `notes`, unless `envPrefix` says otherwise. A server's own settings, declared with `settings`, are listed in its help, its `agent-context` and its generated docs.
+Every server reads these, under its own prefix: the app name in capitals, `NOTES` for `notes`, unless `envPrefix` says otherwise. A server's own settings, declared with `settings`, are listed in its help, its `agent-context` and its generated docs, and `install` passes on every one not marked `tuning`.
 
 | Variable | Default | What it does |
 |---|---|---|
@@ -552,7 +553,7 @@ Every server reads these, under its own prefix: the app name in capitals, `NOTES
 | `<PREFIX>_TOOLSETS` | `all` | Comma-separated toolsets to turn on |
 | `<PREFIX>_SURFACE` | `full` | `search` lists three tools that find, describe and run the rest |
 | `<PREFIX>_TOOL_TIMEOUT_MS` | none | Give up on any tool after this long |
-| `<PREFIX>_HTTP_PORT` | `8787` | For `--http` |
+| `<PREFIX>_HTTP_PORT` | `8787`, or the app's `httpPort` | For `--http` |
 | `<PREFIX>_HTTP_HOST` | `127.0.0.1` | For `--http`. Any other address needs a token |
 | `<PREFIX>_HTTP_TOKEN` | none | Bearer token required by `--http` |
 | `<PREFIX>_DEBUG` | `0` | `1` prints debug lines on stderr |

@@ -15,6 +15,7 @@ function createApp() {
     settings: [
       { env: "NOTES_API_KEY", description: "API key from the notes dashboard.", secret: true },
       { env: "NOTES_REGION", description: "Which region's API to use." },
+      { env: "NOTES_TIMEOUT_MS", description: "Per-request deadline. Defaults to 30000.", tuning: true },
     ],
     context: () => ({}),
     tools: [defineTool({ name: "ping", title: "Ping", description: "Answer pong, to prove the server is alive.", risk: "read", handler: () => "pong" })],
@@ -28,7 +29,7 @@ function place() {
   const project = join(root, "project");
   mkdirSync(home);
   mkdirSync(project);
-  return { home, project, env: { HOME: home, NOTES_API_KEY: "sk-notes-secret-1", NOTES_REGION: "eu" } as NodeJS.ProcessEnv };
+  return { home, project, env: { HOME: home, NOTES_API_KEY: "sk-notes-secret-1", NOTES_REGION: "eu", NOTES_TIMEOUT_MS: "5000" } as NodeJS.ProcessEnv };
 }
 
 function install(args: string[], where: ReturnType<typeof place>) {
@@ -145,6 +146,18 @@ describe("install", () => {
     await install(["claude-desktop", "--copy-env"], where);
     expect(JSON.parse(readFileSync(file, "utf8")).mcpServers.notes.env).toEqual({ NOTES_API_KEY: "sk-notes-secret-1", NOTES_REGION: "eu" });
     if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600);
+  });
+
+  it("leaves tuning out of every client, while help and agent-context still list it", async () => {
+    const where = place();
+    const desktop = process.platform === "darwin" || process.platform === "win32" ? (["claude-desktop"] as const) : [];
+    for (const client of ["claude-code", "codex", "cursor", "gemini", "vscode", ...desktop] as const) {
+      const plan = planInstall(createApp(), { client, scope: client === "vscode" ? "project" : "user", name: "notes", copyEnv: true, local: false }, { env: where.env, cwd: where.project });
+      expect(JSON.stringify(plan)).not.toContain("NOTES_TIMEOUT_MS");
+    }
+    expect((await cli(createApp(), ["--help"], { env: where.env })).stdout).toContain("NOTES_TIMEOUT_MS");
+    const context = JSON.parse((await cli(createApp(), ["agent-context"], { env: where.env })).stdout);
+    expect(context.settings.map((setting: { env: string }) => setting.env)).toContain("NOTES_TIMEOUT_MS");
   });
 
   it("keeps what a person added to an entry by hand when installing again", async () => {

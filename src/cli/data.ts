@@ -64,7 +64,7 @@ export async function runData(app: App, io: CliIO, tokens: string[], options: Da
       const [command, ...flags] = rest;
       if (!command) throw new UsageError("data sync expects the command to copy: data sync <command>.");
       const tool = app.find(command);
-      if (!tool) throw new UsageError(`Unknown command '${command}'.`, { hint: `Run \`${io.bin}\` to list commands.` });
+      if (!tool) throw new UsageError(`Unknown command '${command}'.`, { hint: `Run \`${app.bins.cli}\` to list commands.` });
       if (!tool.sync) {
         const lists = app.allTools.filter((candidate) => candidate.sync).map((candidate) => candidate.command);
         throw new UsageError(`${tool.command} is not a list that can be synced.`, { hint: `Lists that can: ${lists.join(", ") || "none"}.` });

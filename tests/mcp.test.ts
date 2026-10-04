@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { defineTool, slipway, z } from "../src/index.js";
 import { connect, resultData } from "../src/testing.js";
 import { createApp, createStore } from "./fixtures/notes.js";
 
@@ -186,5 +187,34 @@ describe("search surface", () => {
     await mcp.close();
     expect(resultData(done)).toEqual({ deleted: 2 });
     expect(store.calls).toEqual(["delete_note 2"]);
+  });
+});
+
+describe("advertised schemas", () => {
+  it("leave out the safe-integer bounds Zod 4 adds to every whole number, and still validate", async () => {
+    const app = slipway({
+      name: "counts",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [
+        defineTool({
+          name: "mute_account",
+          title: "Mute an account",
+          description: "Mute an account for a while, or for good when no duration is given.",
+          input: z.object({ duration: z.number().int().min(0).optional(), times: z.number().int(), share: z.number().int().max(100) }),
+          risk: "write",
+          handler: (args) => args,
+        }),
+      ],
+    });
+    const mcp = await connect(app);
+    const [tool] = await mcp.listTools();
+    const properties = tool!.inputSchema.properties as Record<string, Record<string, unknown>>;
+    expect(properties.duration).toEqual({ type: "integer", minimum: 0 });
+    expect(properties.times).toEqual({ type: "integer" });
+    expect(properties.share).toEqual({ type: "integer", maximum: 100 });
+    const wrong = await mcp.callTool("mute_account", { times: 1.5, share: 3 });
+    await mcp.close();
+    expect(wrong.isError).toBe(true);
   });
 });

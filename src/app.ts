@@ -68,6 +68,13 @@ export type ServiceSetting = {
   description: string;
   /** A credential: shown as set or unset, never printed. */
   secret?: boolean;
+  /**
+   * Tuning with a working default, such as a timeout or a retry count, or a
+   * second name for another setting. Listed in help and `agent-context`, but
+   * `install` leaves it out, so a client entry and its instructions hold only
+   * what connects an account.
+   */
+  tuning?: boolean;
 };
 
 export type CliIO = {
@@ -82,6 +89,20 @@ export type CliIO = {
   bin: string;
   /** The folder a project-scoped `install` writes into. Defaults to the current one. */
   cwd?: string;
+};
+
+/** An interactive sign-in. It gets the words after `login` and returns an exit code. */
+export type LoginFlow = (io: CliIO, args: string[]) => number | Promise<number>;
+
+/** A terminal-only command an app adds beside its tools. */
+export type CliCommand = {
+  /** The word typed after the binary: `logout`. Must not be a tool's command or a built-in. */
+  name: string;
+  /** What it takes, as help shows it: `logout [<handle>]`. Defaults to the name. */
+  usage?: string;
+  /** One line: what it does. */
+  help: string;
+  run: (io: CliIO, args: string[]) => number | Promise<number>;
 };
 
 export type AppDefinition<Ctx> = {
@@ -103,6 +124,12 @@ export type AppDefinition<Ctx> = {
   /** The npm package that ships the binaries, so `install` can have a client start it with npx. */
   package?: string;
   /**
+   * The port `--http` listens on when neither `--port` nor `<PREFIX>_HTTP_PORT`
+   * names one. 8787 when unset; a server that already shipped another default
+   * keeps it here.
+   */
+  httpPort?: number;
+  /**
    * Builds what handlers need: an API client, config, accounts. Called once,
    * on the first call that needs it, so `--help` works with nothing configured.
    */
@@ -112,10 +139,28 @@ export type AppDefinition<Ctx> = {
   prompts?: readonly PromptDefinition<Ctx>[];
   /** Whether any credentials are set. False makes `doctor` exit 10 and the server warn at startup. */
   configured?: (ctx: Ctx) => boolean | Promise<boolean>;
-  /** Service checks for `doctor`. `network` is true only when the person passed --network. */
+  /** Service checks for `doctor`. `network` is true only when the person passed --network, or `doctorNetwork` is set. */
   doctor?: (ctx: Ctx, options: { network: boolean }) => DoctorCheck[] | Promise<DoctorCheck[]>;
-  /** How to sign in: printed instructions, or an interactive flow that returns an exit code. */
-  login?: string | ((io: CliIO) => number | Promise<number>);
+  /**
+   * Call the service on every `doctor`, not only with --network. Off by
+   * default, so doctor stays quick and spends no requests; on for a service
+   * whose most common failure only a request finds, such as a token missing
+   * a scope.
+   */
+  doctorNetwork?: boolean;
+  /**
+   * How to sign in: printed instructions, or an interactive flow that returns an
+   * exit code. A flow gets the words after `login`: `mastodon-cli login mastodon.social`.
+   * A flow given with `usage` and `help` shows them in help, `login --help` and
+   * `agent-context`, so nobody has to guess that it takes an instance.
+   */
+  login?: string | LoginFlow | { usage?: string; help: string; run: LoginFlow };
+  /**
+   * Terminal commands beyond the tools, such as `logout`, `auth` or `refresh`.
+   * An MCP client never sees them. Each is listed in help and `agent-context`,
+   * and gets the words after its name.
+   */
+  commands?: readonly CliCommand[];
   /** Values to mask in every result: API keys, tokens. */
   secrets?: (ctx: Ctx) => Array<string | undefined | null>;
   /**

@@ -1,6 +1,7 @@
 import { request as httpRequest } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
-import { serveHttpApp } from "../src/serve.js";
+import { slipway } from "../src/index.js";
+import { httpOptions, serveHttpApp } from "../src/serve.js";
 import { createApp } from "./fixtures/notes.js";
 
 const initialize = {
@@ -63,5 +64,13 @@ describe("HTTP transport", () => {
 
   it("will not listen on a public address without a token", async () => {
     await expect(serveHttpApp(createApp(), {}, { host: "0.0.0.0", port: 0 })).rejects.toThrow(/without NOTES_HTTP_TOKEN/);
+  });
+
+  it("keeps a port the server already shipped as its default, under the variable and the flag", () => {
+    const shipped = slipway({ name: "pods", version: "1.0.0", httpPort: 8000, context: () => ({}), tools: [] });
+    expect(httpOptions(createApp(), {}, []).port).toBe(8787);
+    expect(httpOptions(shipped, {}, []).port).toBe(8000);
+    expect(httpOptions(shipped, { PODS_HTTP_PORT: "9100" }, []).port).toBe(9100);
+    expect(httpOptions(shipped, { PODS_HTTP_PORT: "9100" }, ["--http", "--port=9200"]).port).toBe(9200);
   });
 });

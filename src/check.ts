@@ -98,6 +98,16 @@ export async function checkApp(app: App, options: CheckOptions = {}): Promise<Ch
   let totalBytes = 0;
   let largest: { name: string; bytes: number } | undefined;
 
+  for (const command of app.definition.commands ?? []) {
+    if ((BUILTINS as readonly string[]).includes(command.name) || app.find(command.name)) {
+      add("error", "names", `The terminal command '${command.name}' has the name of a built-in or a tool. Rename it.`);
+    }
+  }
+  const httpPort = app.definition.httpPort;
+  if (httpPort !== undefined && (!Number.isInteger(httpPort) || httpPort < 1 || httpPort > 65535)) {
+    add("error", "http", `httpPort is ${httpPort}, which is not a port number from 1 to 65535.`);
+  }
+
   for (const tool of app.allTools) {
     if ((BUILTINS as readonly string[]).includes(tool.command)) {
       add("error", "names", `'${tool.command}' is a built-in CLI command. Rename the tool.`, tool.name);
@@ -323,7 +333,7 @@ function checkDocs(app: App, file: string, add: (level: Finding["level"], check:
     // The match may begin on the character before the binary, a newline included.
     const at = segment.offset + (match.index ?? 0) + (match[0].length - match[0].trimStart().length);
     const line = text.slice(0, at).split("\n").length;
-    if ((BUILTINS as readonly string[]).includes(command)) continue;
+    if ((BUILTINS as readonly string[]).includes(command) || app.definition.commands?.some((custom) => custom.name === command)) continue;
     const tool = app.find(command);
     if (!tool) {
       add("error", "docs", `${file}:${line} names '${command}', which is not a command.`);

@@ -202,11 +202,14 @@ export function renderGeneralHelp(app: App, bin: string): string {
   // An agent often reads this first and pays for it again on every later step, so the
   // rarely needed commands share one line and Slipway's own settings say only what they do.
   const commands: Array<[string, string]> = [
-    [bin, "list the commands"],
+    [app.bins.cli, "list the commands"],
     [`${bin} <command> --help`, "what one takes, with examples"],
     [`${bin} which <words>`, "find the command for a task"],
-    [`${bin} doctor [--network]`, "check the setup and say what is wrong"],
-    [`${bin} login`, "how to connect an account"],
+    [`${bin} doctor${app.definition.doctorNetwork ? "" : " [--network]"}`, "check the setup and say what is wrong"],
+    typeof app.definition.login === "object"
+      ? [`${bin} ${app.definition.login.usage ?? "login"}`, app.definition.login.help]
+      : [`${bin} login`, "how to connect an account"],
+    ...(app.definition.commands ?? []).map((command): [string, string] => [`${bin} ${command.usage ?? command.name}`, command.help]),
     [`${bin} install <client>`, "add the server to an MCP client; install --help lists them"],
     ...(cache || sync ? ([[`${bin} data`, "what is kept on this machine; data clear [<command>] deletes it"]] as Array<[string, string]>) : []),
     ...(sync
@@ -218,8 +221,10 @@ export function renderGeneralHelp(app: App, bin: string): string {
       : []),
     [app.bins.mcp, "the MCP server over stdio; --http [--port N] for HTTP"],
   ];
+  // Tuning keeps a working default, so it is named on one line; agent-context says what each does.
+  const tuning = (app.definition.settings ?? []).filter((setting) => setting.tuning).map((setting) => setting.env);
   const settings: Array<[string, string]> = [
-    ...(app.definition.settings ?? []).map((setting): [string, string] => [setting.env, setting.description]),
+    ...(app.definition.settings ?? []).filter((setting) => !setting.tuning).map((setting): [string, string] => [setting.env, setting.description]),
     [`${names.readOnly}=1`, "hide and refuse every write"],
     [`${names.allowDestructive}=0`, "refuse the irreversible writes"],
     [`${names.toolsets}=a,b`, "only these toolsets, or all"],
@@ -249,6 +254,7 @@ export function renderGeneralHelp(app: App, bin: string): string {
     ``,
     `Settings:`,
     ...settings.map(row),
+    ...(tuning.length ? [`  Also: ${tuning.join(", ")}, described in agent-context.`] : []),
     ``,
     `Exit codes: ${EXIT.ok} ok, ${EXIT.error} unexpected, ${EXIT.usage} usage or refused, ${EXIT.notFound} not found, ${EXIT.auth} auth, ${EXIT.api} API, ${EXIT.rateLimited} rate limited, ${EXIT.notConfigured} not configured`,
     ``,

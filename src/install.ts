@@ -242,7 +242,7 @@ export function planInstall(app: App, options: InstallOptions, context: { env: N
   }
   const launch = launchFor(app, { local: options.local, ...(context.entry ? { entry: context.entry } : {}), ...(context.platform ? { platform: context.platform } : {}) });
   const usesNpx = launch.command === "npx" || launch.args.includes("npx");
-  const settings = app.definition.settings ?? [];
+  const settings = (app.definition.settings ?? []).filter((setting) => !setting.tuning);
   const variables = settings.map((setting) => setting.env);
   const env = { forwarded: [] as string[], copied: [] as string[], toAdd: [] as string[] };
   const notes: string[] = [];

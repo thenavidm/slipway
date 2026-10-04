@@ -16,9 +16,9 @@ function toolFlags(tool: Tool): string[] {
   return flagsFor(tool.jsonSchema).map((flag) => flag.flag);
 }
 
-function bash(bin: string, tools: readonly Tool[]): string {
+function bash(bin: string, tools: readonly Tool[], words: readonly string[]): string {
   const fn = `_${bin.replace(/[^A-Za-z0-9]/g, "_")}`;
-  const commands = [...tools.map((tool) => tool.command), ...BUILTINS].join(" ");
+  const commands = [...tools.map((tool) => tool.command), ...words].join(" ");
   const globals = globalFlags().join(" ");
   const cases = tools
     .map((tool) => `    ${tool.command}) COMPREPLY=( $(compgen -W "${[...toolFlags(tool), ...(tool.paginate ? ["--all", "--max-items"] : [])].join(" ")} ${globals}" -- "$cur") ) ;;`)
@@ -42,18 +42,18 @@ complete -F ${fn} ${bin}
 `;
 }
 
-function zsh(bin: string, tools: readonly Tool[]): string {
+function zsh(bin: string, tools: readonly Tool[], words: readonly string[]): string {
   return `#compdef ${bin}
 # ${bin} completion for zsh, through zsh's bash compatibility layer.
 autoload -U +X bashcompinit && bashcompinit
-${bash(bin, tools)}`;
+${bash(bin, tools, words)}`;
 }
 
 function fishEscape(text: string): string {
   return text.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-function fish(bin: string, tools: readonly Tool[]): string {
+function fish(bin: string, tools: readonly Tool[], words: readonly string[]): string {
   const lines = [`# ${bin} completion for fish`, `complete -c ${bin} -f`];
   for (const tool of tools) {
     lines.push(`complete -c ${bin} -n '__fish_use_subcommand' -a '${tool.command}' -d '${fishEscape(tool.title)}'`);
@@ -61,16 +61,18 @@ function fish(bin: string, tools: readonly Tool[]): string {
       lines.push(`complete -c ${bin} -n '__fish_seen_subcommand_from ${tool.command}' -l '${flag.flag.slice(2)}' -d '${fishEscape(flag.help.slice(0, 80))}'`);
     }
   }
-  for (const builtin of BUILTINS) lines.push(`complete -c ${bin} -n '__fish_use_subcommand' -a '${builtin}'`);
+  for (const word of words) lines.push(`complete -c ${bin} -n '__fish_use_subcommand' -a '${word}'`);
   for (const flag of globalFlags()) lines.push(`complete -c ${bin} -l '${flag.slice(2)}'`);
   return `${lines.join("\n")}\n`;
 }
 
 export function completionScript(app: App, shell: string | undefined, bin: string, env: NodeJS.ProcessEnv): string {
   const tools = app.tools(env);
-  if (shell === "bash") return bash(bin, tools);
-  if (shell === "zsh") return zsh(bin, tools);
-  if (shell === "fish") return fish(bin, tools);
+  // The built-ins, then any terminal commands the app adds, such as logout.
+  const words = [...BUILTINS, ...(app.definition.commands ?? []).map((command) => command.name)];
+  if (shell === "bash") return bash(bin, tools, words);
+  if (shell === "zsh") return zsh(bin, tools, words);
+  if (shell === "fish") return fish(bin, tools, words);
   throw new UsageError(`completion expects bash, zsh or fish${shell ? `, got '${shell}'` : ""}.`, {
     hint: `Add \`source <(${bin} completion bash)\` to your shell's startup file.`,
   });

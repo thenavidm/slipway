@@ -33,6 +33,13 @@ export function agentContext(app: App, env: NodeJS.ProcessEnv, bin: string, opti
   const names = policyEnvNames(app.envPrefix);
   const tools = app.tools(env);
   const hidden = app.allTools.length - tools.length;
+  // Terminal commands the app adds beside its tools, such as logout, and a sign-in flow that says what it takes.
+  const login = app.definition.login;
+  const extra = [...(typeof login === "object" ? [{ name: "login", ...login }] : []), ...(app.definition.commands ?? [])].map((command) => ({
+    command: command.name,
+    usage: `${bin} ${command.usage ?? command.name}`,
+    description: command.help,
+  }));
   const note = "--agent never confirms a write. A command that requires --confirm runs only when it is passed explicitly.";
   if (options.brief) {
     // Enough to pick a command: what each one is, and which write or need --confirm. The full read adds flags and settings.
@@ -43,6 +50,7 @@ export function agentContext(app: App, env: NodeJS.ProcessEnv, bin: string, opti
       usage: { run: `${bin} <command> [flags]`, help: `${bin} <command> --help`, note },
       exit_codes: EXIT_MEANINGS,
       ...(hidden ? { hidden_commands: hidden, ...(app.definition.toolsets ? { toolsets: app.definition.toolsets } : {}) } : {}),
+      ...(extra.length ? { extra_commands: extra } : {}),
       commands: tools.map((tool) => ({
         command: tool.command,
         title: tool.title,
@@ -81,13 +89,14 @@ export function agentContext(app: App, env: NodeJS.ProcessEnv, bin: string, opti
       { env: names.auditLog, value: policy.auditLog ?? null, description: "file that records every attempted write" },
       { env: names.toolTimeoutMs, value: policy.toolTimeoutMs ?? null, description: "deadline for any tool" },
       { env: names.confirm, value: policy.confirm, description: "who confirms a confirmed call over MCP: human asks a person where the client can, model accepts confirm: true" },
-      { env: `${app.envPrefix}_HTTP_PORT`, value: env[`${app.envPrefix}_HTTP_PORT`] ?? null, description: "port for --http, 8787 when unset" },
+      { env: `${app.envPrefix}_HTTP_PORT`, value: env[`${app.envPrefix}_HTTP_PORT`] ?? null, description: `port for --http, ${app.definition.httpPort ?? 8787} when unset` },
       { env: `${app.envPrefix}_HTTP_HOST`, value: env[`${app.envPrefix}_HTTP_HOST`] ?? null, description: "address for --http, 127.0.0.1 when unset; any other needs a token" },
       { env: `${app.envPrefix}_HTTP_TOKEN`, set: Boolean(env[`${app.envPrefix}_HTTP_TOKEN`]), secret: true, description: "bearer token --http requires" },
       { env: `${app.envPrefix}_DEBUG`, value: /^(1|true|yes)$/i.test(env[`${app.envPrefix}_DEBUG`] ?? ""), description: "print debug lines on stderr" },
     ],
     ...(app.definition.toolsets ? { toolsets: app.definition.toolsets } : {}),
     hidden_commands: hidden,
+    ...(extra.length ? { extra_commands: extra } : {}),
     commands: tools.map((tool) => ({
       command: tool.command,
       tool: tool.name,

@@ -148,7 +148,8 @@ export async function runCli(app: App, argv: readonly string[], partial: Partial
   const at = findCommand(argv);
   const command = at === -1 ? undefined : argv[at]!;
   const builtin = command !== undefined && (BUILTINS as readonly string[]).includes(command);
-  const tool = command !== undefined && !builtin ? app.find(command) : undefined;
+  const custom = command !== undefined && !builtin ? app.definition.commands?.find((candidate) => candidate.name === command) : undefined;
+  const tool = command !== undefined && !builtin && !custom ? app.find(command) : undefined;
   const reserved = new Set(tool ? flagsFor(tool.jsonSchema).map((flag) => flag.flag) : []);
   let agent = argv.includes("--agent");
 
@@ -163,12 +164,16 @@ export async function runCli(app: App, argv: readonly string[], partial: Partial
     }
 
     if (builtin) return await runBuiltin(app, io, command, rest, globals);
+    if (custom) {
+      if (globals.help) return print(io, `\nUsage: ${io.bin} ${custom.usage ?? custom.name}\n\n${custom.help}\n`);
+      return await custom.run(io, rest);
+    }
 
     if (!tool) {
-      const candidates = [...app.tools(io.env).map((t) => t.command), ...BUILTINS];
+      const candidates = [...app.tools(io.env).map((t) => t.command), ...BUILTINS, ...(app.definition.commands ?? []).map((c) => c.name)];
       const guess = didYouMean(command, candidates);
       throw new UsageError(`Unknown command '${command}'.${guess ? ` Did you mean '${guess}'?` : ""}`, {
-        hint: `Run \`${io.bin}\` to list commands, or \`${io.bin} which <words>\` to find one.`,
+        hint: `Run \`${app.bins.cli}\` to list commands, or \`${io.bin} which <words>\` to find one.`,
       });
     }
 
@@ -210,6 +215,8 @@ function json(globals: Globals, value: unknown): string {
 async function runBuiltin(app: App, io: CliIO, command: string, rest: string[], globals: Globals): Promise<number> {
   // `<built-in> --help` explains the command instead of running it.
   if (globals.help && command === "install") return print(io, (await import("./install.js")).installHelp(app, io.bin));
+  const login = app.definition.login;
+  if (globals.help && command === "login" && typeof login === "object") return print(io, `\nUsage: ${io.bin} ${login.usage ?? "login"}\n\n${login.help}\n`);
   if (globals.help && command !== "help") return print(io, renderGeneralHelp(app, io.bin));
   const target = rest.find((token) => !token.startsWith("-"));
   switch (command) {
@@ -220,12 +227,12 @@ async function runBuiltin(app: App, io: CliIO, command: string, rest: string[], 
     case "help": {
       if (!target) return print(io, renderGeneralHelp(app, io.bin));
       const tool = app.find(target);
-      if (!tool) throw new UsageError(`Unknown command '${target}'.`, { hint: `Run \`${io.bin}\` to list commands.` });
+      if (!tool) throw new UsageError(`Unknown command '${target}'.`, { hint: `Run \`${app.bins.cli}\` to list commands.` });
       return print(io, renderToolHelp(tool, io.bin));
     }
     case "schema": {
       const tool = target ? app.find(target) : undefined;
-      if (!tool) throw new UsageError(`schema expects a command${target ? `; '${target}' is not one` : ""}.`, { hint: `Run \`${io.bin}\` to list commands.` });
+      if (!tool) throw new UsageError(`schema expects a command${target ? `; '${target}' is not one` : ""}.`, { hint: `Run \`${app.bins.cli}\` to list commands.` });
       if (rest.includes("--output")) {
         if (!tool.output) throw new UsageError(`${tool.command} declares no output schema.`);
         return print(io, json(globals, outputJsonSchema(tool.output)));
@@ -241,14 +248,14 @@ async function runBuiltin(app: App, io: CliIO, command: string, rest: string[], 
       if (globals.format !== "auto") {
         return print(io, json(globals, matches.map(({ tool, score }) => ({ command: tool.command, title: tool.title, risk: tool.risk, score: Number(score.toFixed(2)) }))));
       }
-      if (!matches.length) return print(io, `No command matches '${query}'. Run \`${io.bin}\` to see them all.`);
+      if (!matches.length) return print(io, `No command matches '${query}'. Run \`${app.bins.cli}\` to see them all.`);
       return print(io, matches.map(({ tool }) => toolLine(tool)).join("\n"));
     }
     case "doctor":
       return runDoctor(app, io, { network: rest.includes("--network"), json: globals.format !== "auto" });
     case "login": {
-      const login = app.definition.login;
-      if (typeof login === "function") return await login(io);
+      if (typeof login === "function") return await login(io, rest);
+      if (typeof login === "object") return await login.run(io, rest);
       if (typeof login === "string") return print(io, login);
       return print(io, `${app.title} reads its credentials from the environment. Run \`${io.bin} doctor\` to see what is missing.`);
     }

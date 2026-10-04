@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { defineTool, slipway, z } from "../src/index.js";
 import { cli } from "../src/testing.js";
 import { createApp, createStore } from "./fixtures/notes.js";
 
@@ -263,5 +264,120 @@ describe("CLI: exit codes and files", () => {
   it("prints login instructions", async () => {
     const run = await cli(createApp(), ["login"]);
     expect(run.stdout).toContain("NOTES_API_KEY");
+  });
+});
+
+describe("CLI: terminal commands an app adds", () => {
+  const calls: Array<[string, string[]]> = [];
+  const app = slipway({
+    name: "probe",
+    version: "1.0.0",
+    context: () => ({}),
+    tools: [defineTool({ name: "get_thing", title: "Get a thing", description: "Get one thing by its id, from the account.", input: z.object({ id: z.number() }), risk: "read", handler: () => ({}) })],
+    login: (io, args) => {
+      calls.push(["login", args]);
+      io.stdout(`signed in to ${args[0]}\n`);
+      return 0;
+    },
+    commands: [{ name: "logout", usage: "logout [<handle>]", help: "Forget a stored account.", run: (_io, args) => (calls.push(["logout", args]), 0) }],
+  });
+
+  it("passes login its words, and runs an app's own command with its words", async () => {
+    expect((await cli(app, ["login", "mastodon.social"])).stdout).toContain("signed in to mastodon.social");
+    // Global flags such as --json are taken out before the command sees its words.
+    expect((await cli(app, ["logout", "alice", "--json"])).code).toBe(0);
+    expect(calls).toEqual([["login", ["mastodon.social"]], ["logout", ["alice"]]]);
+  });
+
+  it("lists it in help, agent-context and completion, and explains it with --help", async () => {
+    expect((await cli(app, ["--help"])).stdout).toContain("probe-cli logout [<handle>]");
+    expect((await cli(app, ["logout", "--help"])).stdout).toContain("Forget a stored account.");
+    const context = JSON.parse((await cli(app, ["agent-context"])).stdout);
+    expect(context.extra_commands).toEqual([{ command: "logout", usage: "probe-cli logout [<handle>]", description: "Forget a stored account." }]);
+    expect((await cli(app, ["completion", "bash"])).stdout).toContain("logout");
+  });
+
+  it("shows what a described sign-in takes, in help, login --help and agent-context", async () => {
+    const signedIn: string[][] = [];
+    const described = slipway({
+      name: "probe",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [],
+      login: { usage: "login <instance>", help: "register an app on that instance and sign in", run: (_io, args) => (signedIn.push(args), 0) },
+    });
+    expect((await cli(described, ["--help"])).stdout).toMatch(/probe-cli login <instance> +register an app on that instance and sign in/);
+    const help = await cli(described, ["login", "--help"]);
+    expect(help.stdout).toContain("Usage: probe-cli login <instance>");
+    expect(signedIn).toEqual([]);
+    const context = JSON.parse((await cli(described, ["agent-context"])).stdout);
+    expect(context.extra_commands).toEqual([{ command: "login", usage: "probe-cli login <instance>", description: "register an app on that instance and sign in" }]);
+    expect((await cli(described, ["login", "mastodon.social"])).code).toBe(0);
+    expect(signedIn).toEqual([["mastodon.social"]]);
+  });
+
+  it("names tuning settings on one line of help and describes them in agent-context", async () => {
+    const tuned = slipway({
+      name: "probe",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [],
+      settings: [
+        { env: "PROBE_TOKEN", description: "A token for the account.", secret: true },
+        { env: "PROBE_TIMEOUT_MS", description: "Per-request deadline. Defaults to 30000.", tuning: true },
+        { env: "PROBE_MAX_RETRIES", description: "Retries on 429 and 5xx. Defaults to 3.", tuning: true },
+      ],
+    });
+    const help = (await cli(tuned, ["--help"])).stdout;
+    expect(help).toContain("A token for the account.");
+    expect(help).toContain("Also: PROBE_TIMEOUT_MS, PROBE_MAX_RETRIES, described in agent-context.");
+    expect(help).not.toContain("Per-request deadline");
+    const context = JSON.parse((await cli(tuned, ["agent-context"])).stdout);
+    expect(context.settings.find((setting: { env: string }) => setting.env === "PROBE_TIMEOUT_MS").description).toBe("Per-request deadline. Defaults to 30000.");
+  });
+});
+
+describe("CLI: help printed by the MCP binary", () => {
+  it("sends a person to the CLI binary for the command list, since the bare MCP binary serves", async () => {
+    const app = createApp();
+    let out = "";
+    let err = "";
+    const io = { stdout: (text: string) => void (out += text), stderr: (text: string) => void (err += text), stdin: async () => "", env: {}, isTTY: false, bin: app.bins.mcp };
+    await app.runCli(["--help"], io);
+    expect(out).toMatch(/^ {2}notes-cli +list the commands$/m);
+    expect(out).toContain("notes-mcp doctor");
+    expect(await app.runCli(["no-such-command"], io)).toBe(2);
+    expect(err).toContain("Run `notes-cli` to list commands");
+  });
+});
+
+describe("CLI: doctor that always calls the service", () => {
+  const probe = (doctorNetwork?: boolean) => {
+    const seen: boolean[] = [];
+    const app = slipway({
+      name: "probe",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [],
+      ...(doctorNetwork === undefined ? {} : { doctorNetwork }),
+      doctor: (_ctx, { network }) => (seen.push(network), [{ name: "Scopes", ok: true, detail: network ? "read write follow" : "not checked" }]),
+    });
+    return { app, seen };
+  };
+
+  it("calls the service on plain doctor when the app asks, and says nothing about --network", async () => {
+    const { app, seen } = probe(true);
+    const run = await cli(app, ["doctor"]);
+    expect(seen).toEqual([true]);
+    expect(run.stdout).toContain("read write follow");
+    expect(run.stdout).not.toContain("--network");
+    expect((await cli(app, ["--help"])).stdout).toMatch(/probe-cli doctor +check the setup/);
+  });
+
+  it("leaves the service alone by default until --network is passed", async () => {
+    const { app, seen } = probe();
+    expect((await cli(app, ["doctor"])).stdout).toContain("run with --network to call the service");
+    await cli(app, ["doctor", "--network"]);
+    expect(seen).toEqual([false, true]);
   });
 });

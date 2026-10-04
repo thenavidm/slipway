@@ -2,6 +2,16 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.6, 2026-10-05: what Mastodon's move needed
+
+- **`login` runs the app's own sign-in, with the words after it.** `mastodon-cli login mastodon.social --oob` hands `mastodon.social --oob` to Mastodon's flow, which registers an app on that instance and signs in. A flow given with `usage` and `help` shows them in help, `login --help` and `agent-context`, so nobody has to guess that it takes an instance.
+- **Terminal commands beside the tools.** `commands` adds commands such as `logout` to the CLI only. Each is listed in help, `agent-context` and tab completion, `slipway check` fails one named like a built-in or a tool, and an MCP client never sees it.
+- **Tuning stays out of the way.** A setting marked `tuning: true`, such as a timeout with a working default, is named on one line of help and left out of what `install` writes. On Mastodon, `install claude-code` told people to set 13 variables and now names the 6 that connect an account, and the general help is 64 tokens shorter.
+- **`httpPort` sets the default port for `--http`.** A server that shipped another default, such as 8000, keeps it after the move; `<PREFIX>_HTTP_PORT` and `--port` still override it.
+- **`doctorNetwork` calls the service on every `doctor`.** Doctor stays local unless `--network` is passed, which keeps it quick and spends no requests. Mastodon's most common failure is a token without the `write` scope, which only a request finds, and its docs have always told people to run plain `doctor` for it.
+- **The MCP binary's help names the CLI binary for the command list.** `mastodon-mcp --help` said a bare `mastodon-mcp` lists the commands, when it starts the server. Every hint that says where to list the commands now names the CLI binary.
+- **Advertised schemas leave out Zod 4's safe-integer bounds.** Zod 4 gives every whole number `maximum: 9007199254740991` and its negative unless the schema sets its own. They tell a client nothing, so they are left out of what it receives; three were in Mastodon's tool list. Validation still runs on the full schema.
+
 ## 0.1.5, 2026-10-04: what Bluesky's move found
 
 - **A request that never got an answer exits 5.** A failed fetch, a refused connection or a DNS failure mapped to exit 1, "unexpected error", so a script that retries on 5 gave up instead. Bluesky 1.2.3 exited 5 for an unreachable host, 0.1.4 made it 1, and it is 5 again.
