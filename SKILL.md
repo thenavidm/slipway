@@ -5,7 +5,7 @@ metadata:
   install:
     package: "@thenavidm/slipway"
     node: ">=22"
-    check: "npx slipway --version"
+    check: "npm ls @thenavidm/slipway"
 ---
 
 # Building with Slipway
@@ -14,7 +14,7 @@ Slipway turns one list of tool definitions into an MCP server and a CLI. Both su
 
 ## Install gate
 
-Run `npx slipway --version` in the repo. If it does not print a version, STOP: the package is missing. Install it with `npm install @thenavidm/slipway`, then check again.
+Run `npm ls @thenavidm/slipway` in the repo. If it does not list a version, STOP: the package is missing. Install it with `npm install @thenavidm/slipway`, then check again. Never test with a bare `npx slipway` before it is installed: an unrelated package on npm is called `slipway`, and npx would fetch and run that one.
 
 ## The three files
 
@@ -93,7 +93,7 @@ tools: fromOpenAPI(spec, {
 }),
 ```
 
-Run `npx slipway openapi openapi.json` first: it lists every tool the document becomes, what it skips and why, the schemas too large for a model, and the hash to pin. Fix a misleading method with `risk: { searchProducts: "read" }`, and rename with `names`.
+Run `npx -p @thenavidm/slipway slipway openapi openapi.json` first: it lists every tool the document becomes, what it skips and why, the schemas too large for a model, and the hash to pin. Fix a misleading method with `risk: { searchProducts: "read" }`, and rename with `names`.
 
 ## Shipping it to clients
 

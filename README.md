@@ -459,8 +459,10 @@ A server with a hundred tools costs a client that loads every definition up fron
 `slipway check` runs against your built app and its real MCP server:
 
 ```bash
-slipway check dist/app.js --bin dist/index.js --docs README.md,SKILL.md
+npx slipway check dist/app.js --bin dist/index.js --docs README.md,SKILL.md
 ```
+
+Run it in a project that has `@thenavidm/slipway` installed, where npx uses that copy. Anywhere else, name the package: `npx -p @thenavidm/slipway slipway openapi spec.json`. A bare `npx slipway` with nothing installed fetches an unrelated npm package of the same name.
 
 | Check | What fails |
 |---|---|
@@ -519,6 +521,7 @@ const mcp = await connect(app, { era: "modern", elicit: () => ({ action: "accept
 | Codex shows the server as failed at startup | The first npx download outlasted 10 seconds | `install codex` sets `startup_timeout_sec = 60`; add it by hand to an older entry |
 | `slipway check` warns about schema size | One tool's schema is large or repeats its definitions | Send the body schema once, or advertise a short one and validate the full one in the handler |
 | `slipway check` cannot load the app | The module starts the server when imported | Export the app from `app.ts` and call `app.main()` only in `index.ts` |
+| `npx slipway` prints something unexpected | Slipway is not installed in this folder, so npx fetched an unrelated package called `slipway` | Run `npm install @thenavidm/slipway`, or `npx -p @thenavidm/slipway slipway <command>` |
 
 ## Environment variables
 
