@@ -60,6 +60,9 @@ describe("CLI: discovery", () => {
   it("says why commands are hidden and which setting lists them", async () => {
     const off = (await cli(createApp(), [], { env: { NOTES_TOOLSETS: "none" } })).stdout;
     expect(off).toContain("1 more command is in admin, off: NOTES_TOOLSETS=admin turns it on.");
+    // With the paid read hidden, every `!` command needs --confirm and nothing else does, so the legend can say so.
+    expect(off).toContain("! public or irreversible, needs --confirm");
+    expect((await cli(createApp(), [])).stdout).not.toContain("needs --confirm");
     const readOnly = (await cli(createApp(), [], { env: { NOTES_READ_ONLY: "1" } })).stdout;
     expect(readOnly).toMatch(/\d+ writes are hidden by NOTES_READ_ONLY=1\./);
   });
@@ -71,6 +74,16 @@ describe("CLI: discovery", () => {
     expect(brief.exit_codes[10]).toBe("nothing configured");
     expect(brief.commands.find((command: { command: string }) => command.command === "delete-note")).toMatchObject({ risk: "destructive", requires_confirm: true });
     expect(brief.commands.find((command: { command: string }) => command.command === "get-note")).toEqual({ command: "get-note", title: expect.any(String) });
+  });
+
+  it("lists in --help and agent-context every variable the server reads", async () => {
+    const help = (await cli(createApp(), ["--help"])).stdout;
+    const context = JSON.parse((await cli(createApp(), ["agent-context"])).stdout);
+    const listed = new Set(context.settings.map((setting: { env: string }) => setting.env));
+    for (const name of ["READ_ONLY", "ALLOW_DESTRUCTIVE", "AUDIT_LOG", "TOOLSETS", "SURFACE", "TOOL_TIMEOUT_MS", "CONFIRM", "HTTP_PORT", "HTTP_HOST", "HTTP_TOKEN", "DEBUG"]) {
+      expect(listed.has(`NOTES_${name}`)).toBe(true);
+      expect(help).toContain(name === "HTTP_HOST" || name === "HTTP_TOKEN" ? `_${name.slice(5)}` : `NOTES_${name}`);
+    }
   });
 
   it("suggests the closest command for a typo and exits 2", async () => {

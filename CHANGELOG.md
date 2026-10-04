@@ -2,6 +2,15 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.5, 2026-10-04: what Bluesky's move found
+
+- **A request that never got an answer exits 5.** A failed fetch, a refused connection or a DNS failure mapped to exit 1, "unexpected error", so a script that retries on 5 gave up instead. Bluesky 1.2.3 exited 5 for an unreachable host, 0.1.4 made it 1, and it is 5 again.
+- **`--help` and `agent-context` list every variable Slipway reads**, `<PREFIX>_HTTP_PORT`, `_HOST`, `_TOKEN` and `_DEBUG` included. Bluesky's own help listed the HTTP ones before it moved.
+- **A shorter general help.** An agent often reads it first and pays for it again on every later step. The header drops the description, the rarely needed commands share one line, and Slipway's own settings say only what they do: Bluesky's went from 780 tokens to 667.
+- **The command list says `!` needs `--confirm`** when that is true of every command it lists.
+- **The entry turns on Node's compile cache.** The README's `src/index.ts` loads the app after `module.enableCompileCache()`, so every launch after the first skips compiling it: Bluesky answers a client in 183 ms instead of 204. Node before 22.8 starts as before.
+- **The README says what happens to a piped request after stdin closes.** The server stops without answering, as the MCP stdio binding asks; keep stdin open until you read the answer.
+
 ## 0.1.4, 2026-10-04: faster starts, cheaper results in Codex
 
 - **A JSON Schema compiles on its tool's first call.** `jsonSchema()` compiled its validator as soon as a tool was defined, so a server paid for every schema before it could answer. On Teachable's 123 contract tools that held the first answer back by 118 ms. Building Stripe's 611 OpenAPI tools took 1,745 ms and now takes 69; GitHub's 1,230 took 646 ms and now take 60 (medians of three runs on one Mac). A tool's first call now compiles its own schema, a median of 3 ms on Stripe's and under 1 ms on GitHub's.

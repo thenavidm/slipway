@@ -94,9 +94,11 @@ export function renderList(app: App, tools: readonly Tool[], bin: string, env: N
     if (grouped) lines.push(``, `  ${group || "general"}${group && toolsets[group] ? `: ${toolsets[group]}` : ""}`);
     for (const tool of members) lines.push(`  ${riskMark(tool.risk)} ${tool.command.padEnd(width)}${tool.title}`);
   }
+  // The legend says `!` needs --confirm only when that holds for every listed command.
+  const confirmByRisk = tools.every((tool) => tool.requireConfirm === (tool.risk === "destructive"));
   lines.push(
     ``,
-    `  * writes    ! public or irreversible`,
+    `  * writes    ! public or irreversible${confirmByRisk ? ", needs --confirm" : ""}`,
     ``,
     `  ${bin} <command> --help    what one takes, with examples`,
     `  ${bin} which <words>       find the command for a task`,
@@ -197,16 +199,15 @@ export function renderGeneralHelp(app: App, bin: string): string {
   const cache = app.allTools.some((tool) => tool.cache);
   const sync = app.allTools.some((tool) => tool.sync);
   const jobs = app.allTools.some((tool) => tool.job);
+  // An agent often reads this first and pays for it again on every later step, so the
+  // rarely needed commands share one line and Slipway's own settings say only what they do.
   const commands: Array<[string, string]> = [
     [bin, "list the commands"],
     [`${bin} <command> --help`, "what one takes, with examples"],
     [`${bin} which <words>`, "find the command for a task"],
-    [`${bin} schema <command>`, "its JSON Schema; --output for the result's"],
-    [`${bin} agent-context`, "all of this as JSON; --brief for less"],
     [`${bin} doctor [--network]`, "check the setup and say what is wrong"],
     [`${bin} login`, "how to connect an account"],
-    [`${bin} install <client>`, "add the server to claude-code, codex, claude-desktop, cursor, vscode or gemini"],
-    [`${bin} completion <shell>`, "tab completion for bash, zsh or fish"],
+    [`${bin} install <client>`, "add the server to an MCP client; install --help lists them"],
     ...(cache || sync ? ([[`${bin} data`, "what is kept on this machine; data clear [<command>] deletes it"]] as Array<[string, string]>) : []),
     ...(sync
       ? ([
@@ -220,14 +221,16 @@ export function renderGeneralHelp(app: App, bin: string): string {
   const settings: Array<[string, string]> = [
     ...(app.definition.settings ?? []).map((setting): [string, string] => [setting.env, setting.description]),
     [`${names.readOnly}=1`, "hide and refuse every write"],
-    [`${names.allowDestructive}=0`, "keep writes, refuse the irreversible ones"],
+    [`${names.allowDestructive}=0`, "refuse the irreversible writes"],
     [`${names.toolsets}=a,b`, "only these toolsets, or all"],
-    [`${names.surface}=search`, "MCP serves three tools that find, describe and run the rest"],
-    [`${names.auditLog}=<file>`, "log every attempted write to this file"],
-    [`${names.toolTimeoutMs}=<ms>`, "give up on any tool after this long"],
-    [`${names.confirm}=model`, "confirm: true alone confirms, for an agent with no person to ask"],
+    [`${names.surface}=search`, "MCP lists three finder tools instead"],
+    [`${names.auditLog}=<file>`, "log every attempted write"],
+    [`${names.toolTimeoutMs}=<ms>`, "deadline for any tool"],
+    [`${names.confirm}=model`, "confirm: true alone confirms over MCP"],
     ...(cache ? ([[`${names.cache}=0`, "never answer from the local cache"]] as Array<[string, string]>) : []),
     ...(cache || sync ? ([[`${names.dataDir}=<dir>`, "keep local data in this folder"]] as Array<[string, string]>) : []),
+    [`${app.envPrefix}_HTTP_PORT / _HOST / _TOKEN`, "for --http"],
+    [`${app.envPrefix}_DEBUG=1`, "debug lines on stderr"],
   ];
   // Flags that cannot apply here (jobs, the cache) are left out; agent-context lists every one.
   const flags = GLOBAL_FLAGS.map(([flag]) => flag).filter(
@@ -237,16 +240,17 @@ export function renderGeneralHelp(app: App, bin: string): string {
   const row = ([left, help]: [string, string]) => `  ${left.padEnd(width)}${help}`;
   const lines = [
     ``,
-    `${app.title} ${app.version}${app.description ? `: ${app.description}` : ""}`,
+    `${app.title} ${app.version}`,
     ``,
     ...commands.map(row),
+    `  Also: schema <command>, agent-context [--brief] (all of this as JSON), completion <shell>.`,
     ``,
-    `Flags: ${flags.join(", ")}, and --agent for compact JSON with no prompts, which never confirms a write.`,
+    `Flags: ${flags.join(", ")}, and --agent: compact JSON, no prompts, never confirms a write.`,
     ``,
     `Settings:`,
     ...settings.map(row),
     ``,
-    `Exit codes: ${EXIT.ok} ok, ${EXIT.error} unexpected error, ${EXIT.usage} usage or refused write, ${EXIT.notFound} not found, ${EXIT.auth} auth, ${EXIT.api} API, ${EXIT.rateLimited} rate limited, ${EXIT.notConfigured} nothing configured`,
+    `Exit codes: ${EXIT.ok} ok, ${EXIT.error} unexpected, ${EXIT.usage} usage or refused, ${EXIT.notFound} not found, ${EXIT.auth} auth, ${EXIT.api} API, ${EXIT.rateLimited} rate limited, ${EXIT.notConfigured} not configured`,
     ``,
   ];
   if (app.definition.links?.repository) lines.push(app.definition.links.repository, ``);

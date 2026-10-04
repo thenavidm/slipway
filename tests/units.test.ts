@@ -76,6 +76,14 @@ describe("errors", () => {
     expect(toSlipwayError(new Error("No API key is configured")).code).toBe("not_configured");
     expect(toSlipwayError(new Error("something odd")).exitCode).toBe(EXIT.error);
   });
+
+  it("treat a request that never got an answer as the service's failure, not a bug", () => {
+    // Bluesky's client reports an unreachable host as status 0 with this message; its 1.2.3 exited 5 for it.
+    expect(toSlipwayError(Object.assign(new Error("Could not reach https://x: fetch failed"), { status: 0 })).exitCode).toBe(EXIT.api);
+    expect(toSlipwayError(Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } })).exitCode).toBe(EXIT.api);
+    expect(toSlipwayError(Object.assign(new Error("lookup failed"), { code: "ENOTFOUND" })).exitCode).toBe(EXIT.api);
+    expect(toSlipwayError(new Error("socket hang up")).exitCode).toBe(EXIT.api);
+  });
 });
 
 describe("secrets", () => {

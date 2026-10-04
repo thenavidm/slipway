@@ -184,5 +184,9 @@ export function toSlipwayError(error: unknown): SlipwayError {
   if (/\b401\b|\b403\b|unauthori[sz]ed|forbidden|invalid[_ ]grant|expired token|token (has )?expired/.test(text))
     return new AuthError(message, { cause: error });
   if (/\b404\b|not found|does not exist/.test(text)) return new NotFoundError(message, { cause: error });
+  // A request that never got an answer is the service's failure, not a bug here: exit 5, which a script may retry.
+  const codes = [(error as { code?: unknown })?.code, (error as { cause?: { code?: unknown } })?.cause?.code];
+  const network = codes.some((code) => typeof code === "string" && /^(ECONN(REFUSED|RESET|ABORTED)|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|E(HOST|NET)UNREACH|EPIPE|UND_ERR_\w+)$/.test(code));
+  if (network || /fetch failed|could not reach|network error|socket hang up/.test(text)) return new ApiError(message, { cause: error });
   return new SlipwayError(message, "internal", EXIT.error, { cause: error });
 }
