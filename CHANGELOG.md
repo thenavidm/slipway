@@ -2,6 +2,11 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.2, 2026-10-04: clients always start the server
+
+- **`slipway check` fails a package whose `npx -y` default is the CLI.** With several binaries on one file, npx starts the first one listed. A package that lists its CLI first hands every client launched with `npx -y <package>` the command list instead of a server. The check reads `package.json` and names the fix: list the MCP binary first.
+- **`install` follows `@latest`.** Clients start `npx --package=<package>@latest <name>-mcp`, so they pick up every release on their next start. The binary is still named, so the order in `package.json` cannot pick the wrong one.
+
 ## 0.1.1, 2026-10-04: a safer install check
 
 - **No stranger's package through npx.** An unrelated npm package owns the bare name `slipway`, so a bare `npx slipway` with nothing installed fetched and ran it. SKILL.md now checks the install with `npm ls @thenavidm/slipway`, and every command that may run before an install names the package: `npx -p @thenavidm/slipway slipway <command>`.

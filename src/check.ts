@@ -31,6 +31,8 @@ export type CheckOptions = {
   bin?: string;
   /** Advertised schema size per tool that earns a warning, and an error. */
   schemaBudget?: { warnBytes: number; errorBytes: number };
+  /** The app's package.json, to check that `npx -y <package>` starts the MCP server. */
+  packageJson?: string;
 };
 
 export type CheckReport = {
@@ -147,6 +149,7 @@ export async function checkApp(app: App, options: CheckOptions = {}): Promise<Ch
   if (!app.definition.package) {
     add("warn", "install", "No package is set, so `install` points clients at this copy on disk instead of the published one. Set package to the npm name.");
   }
+  if (options.packageJson) checkBins(app, options.packageJson, add);
 
   const instructions = app.instructions ?? "";
   if (!instructions) add("warn", "instructions", "No server instructions. Clients use them to decide when to reach for these tools.");
@@ -252,6 +255,40 @@ async function checkParityIn(
     add("error", "mcp", `Listing tools failed: ${(error as Error).message}`);
   } finally {
     await client.close().catch(() => undefined);
+  }
+}
+
+/**
+ * `npx -y <package>` is how most people install a server, and npx starts one
+ * binary without being told which. With several binaries on one file it runs
+ * the first listed, so a package that lists its CLI first hands every client
+ * the command list instead of a server.
+ */
+function checkBins(app: App, file: string, add: (level: Finding["level"], check: string, message: string, tool?: string) => void) {
+  let pkg: { name?: string; bin?: string | Record<string, string> };
+  try {
+    pkg = JSON.parse(readFileSync(file, "utf8")) as typeof pkg;
+  } catch (error) {
+    add("error", "install", `Could not read ${file}: ${(error as Error).message}`);
+    return;
+  }
+  if (app.definition.package && pkg.name && pkg.name !== app.definition.package) {
+    add("warn", "install", `The app's package is ${app.definition.package} but package.json is ${pkg.name}.`);
+  }
+  if (!pkg.bin || typeof pkg.bin === "string") return;
+  const bins = pkg.bin;
+  const keys = Object.keys(bins);
+  if (!keys.includes(app.bins.mcp)) {
+    add("error", "install", `package.json has no ${app.bins.mcp} binary, so clients cannot start the server by name.`);
+    return;
+  }
+  const unscoped = (pkg.name ?? "").split("/").pop() ?? "";
+  // npx's own order: a binary named after the package, then the only file all binaries share.
+  const chosen = keys.includes(unscoped) ? unscoped : new Set(Object.values(bins)).size === 1 ? keys[0] : undefined;
+  if (chosen === undefined) {
+    add("error", "install", `npx -y ${pkg.name} cannot choose between ${keys.join(" and ")}. Point them at one file and list ${app.bins.mcp} first.`);
+  } else if (chosen !== app.bins.mcp && bins[chosen] === bins[app.bins.mcp] && chosen === app.bins.cli) {
+    add("error", "install", `npx -y ${pkg.name} starts ${chosen}, the CLI, so a client launched that way gets the command list instead of a server. List ${app.bins.mcp} first in package.json's bin.`);
   }
 }
 

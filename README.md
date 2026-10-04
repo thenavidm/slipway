@@ -444,7 +444,7 @@ notes-cli install cursor --dry-run
 | `vscode` | `.vscode/mcp.json` | VS Code asks for each credential once and stores it securely |
 | `gemini` | `~/.gemini/settings.json`, or `.gemini/settings.json` | `${NAME}` references, which Gemini CLI needs to pass anything named like a key |
 
-A published server is started with `npx --package=<package>@<version> <name>-mcp`, pinned to the version you installed, with Codex's startup timeout raised for the first download. Without `package`, or with `--local`, the client starts this copy on disk. Installing again updates the entry in place: anything you added to it by hand stays, and the old file is kept as a backup.
+A published server is started with `npx --package=<package>@latest <name>-mcp`, so a client picks up every release on its next start, with Codex's startup timeout raised for the download. The binary is named, because npx alone starts whichever binary a package lists first. Without `package`, or with `--local`, the client starts this copy on disk. Installing again updates the entry in place: anything you added to it by hand stays, and the old file is kept as a backup.
 
 ## 11. Large catalogs
 
@@ -476,7 +476,7 @@ Run it in a project that has `@thenavidm/slipway` installed, where npx uses that
 | Parity | A tool, schema, annotation or approval flag that differs between MCP and the CLI |
 | Docs | A command or flag in your README or SKILL.md that does not exist |
 | Startup | A built server that exits or hangs when nothing is configured |
-| Install | No `package`, so `install` cannot point clients at the published server |
+| Install | No `package`, or a package.json whose `npx -y` default starts the CLI instead of the server |
 
 Parity runs on both protocol revisions a client may open with. `slipway docs dist/app.js` prints the command table, every argument and the settings as Markdown, from the same definitions. `slipway inspect dist/app.js` lists the tools exactly as a client receives them, and `slipway openapi <file|url>` previews what an OpenAPI document becomes.
 

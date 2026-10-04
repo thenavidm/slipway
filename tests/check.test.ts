@@ -49,6 +49,23 @@ describe("slipway check", () => {
     }
   });
 
+  it("fails a package whose npx default is the CLI, since a client would get the command list", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "slipway-bins-"));
+    const app = slipway({ name: "notes", version: "1.0.0", package: "@x/notes-mcp-cli", instructions: "Notes: read notes.", context: () => ({}), tools: [] });
+    const write = (bin: Record<string, string>) => {
+      const file = join(dir, `package-${Object.keys(bin).join("-")}.json`);
+      writeFileSync(file, JSON.stringify({ name: "@x/notes-mcp-cli", bin }));
+      return file;
+    };
+    const errors = async (bin: Record<string, string>) =>
+      (await checkApp(app, { env: {}, packageJson: write(bin) })).findings.filter((finding) => finding.check === "install" && finding.level === "error").map((finding) => finding.message);
+    expect(await errors({ "notes-cli": "dist/index.js", "notes-mcp": "dist/index.js" })).toEqual([
+      "npx -y @x/notes-mcp-cli starts notes-cli, the CLI, so a client launched that way gets the command list instead of a server. List notes-mcp first in package.json's bin.",
+    ]);
+    expect(await errors({ "notes-mcp": "dist/index.js", "notes-cli": "dist/index.js" })).toEqual([]);
+    expect((await errors({ "notes-mcp": "dist/mcp.js", "notes-cli": "dist/cli.js" }))[0]).toContain("cannot choose");
+  });
+
   it("catches thin descriptions, broken examples and a missing summary", async () => {
     const app = slipway({
       name: "bad",

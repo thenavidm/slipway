@@ -105,7 +105,13 @@ async function main(argv: string[]): Promise<number> {
   if (command === "check") {
     const docs = option(rest, "--docs")?.split(",").filter(Boolean);
     const bin = option(rest, "--bin");
-    const report = await checkApp(app, { env: process.env, ...(docs ? { docs } : {}), ...(bin ? { bin: resolve(bin) } : {}) });
+    const packageJson = resolve("package.json");
+    const report = await checkApp(app, {
+      env: process.env,
+      ...(docs ? { docs } : {}),
+      ...(bin ? { bin: resolve(bin) } : {}),
+      ...(existsSync(packageJson) ? { packageJson } : {}),
+    });
     const strict = rest.includes("--strict");
     const failed = report.errors > 0 || (strict && report.warnings > 0);
     if (rest.includes("--json")) {

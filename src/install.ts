@@ -65,7 +65,8 @@ export type InstallPlan = {
 
 /**
  * How a client should start this server: the published package through npx,
- * pinned to this version, or this copy on disk.
+ * at `@latest` so a client picks up every release on its next start, or this
+ * copy on disk.
  *
  * npx needs the binary named: a package with an MCP and a CLI binary leaves
  * npx to pick one otherwise, and the CLI started with no arguments prints its
@@ -75,7 +76,7 @@ export function launchFor(app: App, options: { local: boolean; entry?: string; p
   const platform = options.platform ?? process.platform;
   let launch: Launch;
   if (app.definition.package && !options.local) {
-    launch = { command: "npx", args: ["--yes", `--package=${app.definition.package}@${app.version}`, app.bins.mcp] };
+    launch = { command: "npx", args: ["--yes", `--package=${app.definition.package}@latest`, app.bins.mcp] };
   } else {
     const entry = options.entry ?? (process.argv[1] ? realpathSync(process.argv[1]) : undefined);
     if (!entry) throw new UsageError("Could not tell where this server is installed.", { hint: "Run install from the installed binary." });

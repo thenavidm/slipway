@@ -35,7 +35,7 @@ function install(args: string[], where: ReturnType<typeof place>) {
   return cli(createApp(), ["install", ...args], { env: where.env, cwd: where.project });
 }
 
-const npx = ["--yes", "--package=@example/notes-mcp-cli@2.3.4", "notes-mcp"];
+const npx = ["--yes", "--package=@example/notes-mcp-cli@latest", "notes-mcp"];
 /** How this machine's clients will start the server: npx directly, or through cmd on Windows. */
 const launch = launchFor(createApp(), { local: false });
 
@@ -99,7 +99,7 @@ describe("install", () => {
       [
         "[mcp_servers.notes]",
         'command = "npx"',
-        'args = ["--yes", "--package=@example/notes-mcp-cli@2.3.4", "notes-mcp"]',
+        'args = ["--yes", "--package=@example/notes-mcp-cli@latest", "notes-mcp"]',
         'env_vars = ["NOTES_API_KEY", "EXTRA_TOKEN"]',
         "startup_timeout_sec = 60",
         "tool_timeout_sec = 120",
