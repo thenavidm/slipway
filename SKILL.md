@@ -14,7 +14,7 @@ Slipway turns one list of tool definitions into an MCP server and a CLI. Both su
 
 ## Install gate
 
-Run `npx slipway --version` in the repo. If it does not print a version, STOP: the package is missing. Slipway is not on npm yet, so install it from a local clone with `npm install /path/to/slipway`, then check again.
+Run `npx slipway --version` in the repo. If it does not print a version, STOP: the package is missing. Install it with `npm install @thenavidm/slipway`, then check again.
 
 ## The three files
 

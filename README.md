@@ -5,7 +5,9 @@
 
 # Slipway: MCP Server & CLI Framework
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue)](./LICENSE)
+[![npm](https://img.shields.io/npm/v/@thenavidm/slipway?color=orange&label=npm)](https://www.npmjs.com/package/@thenavidm/slipway)
+[![CI](https://github.com/thenavidm/slipway/actions/workflows/ci.yml/badge.svg)](https://github.com/thenavidm/slipway/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-Apache_2.0-green)](./LICENSE)
 [![YouTube](https://img.shields.io/badge/YouTube-@thenavidm-red?logo=youtube&logoColor=white)](https://youtube.com/@thenavidm?sub_confirmation=1)
 [![X](https://img.shields.io/badge/X-@thenavidm-black?logo=x)](https://x.com/thenavidm)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-thenavidm-0A66C2?logo=linkedin&logoColor=white)](https://linkedin.com/in/thenavidm)
@@ -15,8 +17,6 @@ TypeScript framework for MCP servers and CLIs, for Claude Code, Codex and AI age
 The two surfaces cannot drift apart. They are generated from the same tool list, and every call on either one runs through the same code: the same validation, the same guard, the same errors.
 
 Built and maintained by [Navid Moazzez](https://navid.me?utm_source=github&utm_medium=referral&utm_campaign=slipway&utm_content=readme).
-
-> **Not published yet.** Slipway is not on npm. Clone it and install it from a local path until it is.
 
 ## Two ways to use it
 
@@ -115,10 +115,8 @@ They are the same program reading the same tool definitions, so anything one can
 
 Slipway needs Node.js 22 or later, and ESM. Local data uses the SQLite built into Node.js 22.13 and later; on an older release everything else works and the cache stays off.
 
-Until it is published, install it from a local clone:
-
 ```bash
-npm install /path/to/slipway
+npm install @thenavidm/slipway
 npm install --save-dev ajv
 ```
 
