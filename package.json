@@ -1,0 +1,89 @@
+{
+  "name": "@thenavidm/slipway",
+  "version": "0.1.0",
+  "description": "Slipway, the TypeScript framework for MCP servers and agent-native CLIs. One tool definition ships an MCP server and a CLI, with write safety, typed results and release checks built in.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Navid Moazzez (https://navid.me)",
+  "homepage": "https://github.com/thenavidm/slipway#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thenavidm/slipway.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thenavidm/slipway/issues"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "mcp framework",
+    "cli",
+    "cli framework",
+    "agent-native cli",
+    "ai agents",
+    "claude code",
+    "codex",
+    "typescript",
+    "tool calling",
+    "mcp sdk",
+    "standard schema",
+    "zod",
+    "openapi",
+    "llm tools",
+    "claude desktop",
+    "cursor"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "slipway": "dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md",
+    "LICENSE",
+    "NOTICE",
+    "CHANGELOG.md",
+    "SECURITY.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.3.0",
+    "zod": "^4.2.0"
+  },
+  "peerDependencies": {
+    "ajv": "^8.17.1"
+  },
+  "peerDependenciesMeta": {
+    "ajv": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.3.0",
+    "@types/node": "^22.10.0",
+    "ajv": "^8.17.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  }
+}

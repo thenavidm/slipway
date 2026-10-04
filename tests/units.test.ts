@@ -1,0 +1,142 @@
+import { describe, expect, it } from "vitest";
+import { flagsFor, parseToolArgs } from "../src/cli/flags.js";
+import { formatOutput, selectFields } from "../src/cli/output.js";
+import { EXIT, httpError, toSlipwayError } from "../src/errors.js";
+import { defineTool, Secrets, slipway, z } from "../src/index.js";
+import { readPolicy } from "../src/policy.js";
+import { inputJsonSchema } from "../src/schema.js";
+
+describe("flags", () => {
+  const schema = inputJsonSchema(
+    z.object({
+      text: z.string().describe("What to post."),
+      count: z.number().int().optional(),
+      draft: z.boolean().optional(),
+      kind: z.enum(["post", "reply"]).optional(),
+      ids: z.array(z.number().int()).optional(),
+      labels: z.array(z.string()).optional(),
+      meta: z.object({ a: z.string() }).optional(),
+    }),
+  );
+  const flags = flagsFor(schema);
+
+  it("derives kinds, choices and requirement from the schema", () => {
+    const by = Object.fromEntries(flags.map((flag) => [flag.key, flag]));
+    expect(by.text).toMatchObject({ flag: "--text", kind: "string", required: true, help: "What to post." });
+    expect(by.count!.kind).toBe("integer");
+    expect(by.kind).toMatchObject({ kind: "enum", choices: ["post", "reply"] });
+    expect(by.ids).toMatchObject({ kind: "integer", repeatable: true });
+    expect(by.meta!.kind).toBe("json");
+  });
+
+  it("parses every spelling a person types", () => {
+    expect(parseToolArgs(["hello", "--count=3", "--draft", "--kind", "reply", "--ids", "1,2", "--ids", "3", "--labels", "a,b", "--meta", '{"a":"x"}'], flags, [])).toEqual({
+      text: "hello",
+      count: 3,
+      draft: true,
+      kind: "reply",
+      ids: [1, 2, 3],
+      labels: ["a,b"],
+      meta: { a: "x" },
+    });
+    expect(parseToolArgs(["--text", "x", "--no-draft"], flags, [])).toEqual({ text: "x", draft: false });
+    expect(parseToolArgs(["--text", "x", "--draft", "false"], flags, [])).toEqual({ text: "x", draft: false });
+  });
+
+  it("explains a mistake in terms of flags", () => {
+    expect(() => parseToolArgs(["--cuont", "3"], flags, [])).toThrow("Unknown option --cuont. Did you mean --count?");
+    expect(() => parseToolArgs(["--count", "three"], flags, [])).toThrow("--count expects a whole number");
+    expect(() => parseToolArgs(["--kind", "quote"], flags, [])).toThrow("one of: post, reply");
+  });
+});
+
+describe("output", () => {
+  it("selects nested fields across arrays without losing siblings", () => {
+    const data = { posts: [{ uri: "a", text: "x", author: { handle: "h", name: "n" } }] };
+    expect(selectFields(data, ["posts.uri", "posts.author.handle"])).toEqual({ posts: [{ uri: "a", author: { handle: "h" } }] });
+  });
+
+  it("escapes CSV cells and flattens nested values", () => {
+    const text = formatOutput([{ id: 1, title: 'Say "hi", then go', tags: ["a"] }], undefined, { format: "csv" });
+    expect(text).toBe('id,title,tags\n1,"Say ""hi"", then go","[""a""]"\n');
+  });
+});
+
+describe("errors", () => {
+  it("map HTTP statuses to exit codes a script can branch on", () => {
+    expect(httpError(401, "x").exitCode).toBe(EXIT.auth);
+    expect(httpError(404, "x").exitCode).toBe(EXIT.notFound);
+    expect(httpError(422, "x").exitCode).toBe(EXIT.usage);
+    expect(httpError(429, "x").exitCode).toBe(EXIT.rateLimited);
+    expect(httpError(503, "x").exitCode).toBe(EXIT.api);
+  });
+
+  it("classify errors from code that knows nothing about Slipway", () => {
+    expect(toSlipwayError(Object.assign(new Error("boom"), { status: 403 })).code).toBe("auth");
+    expect(toSlipwayError(new Error("No API key is configured")).code).toBe("not_configured");
+    expect(toSlipwayError(new Error("something odd")).exitCode).toBe(EXIT.error);
+  });
+});
+
+describe("secrets", () => {
+  it("masks registered values and credential-named fields, and leaves short values alone", () => {
+    const secrets = new Secrets();
+    secrets.add("sk-live-123456", "eu");
+    expect(secrets.redact("key sk-live-123456 in eu")).toBe("key [redacted] in eu");
+    expect(secrets.redactDeep({ headers: { Authorization: "Bearer abc" }, password: "pw", region: "eu" })).toEqual({
+      headers: { Authorization: "[redacted]" },
+      password: "[redacted]",
+      region: "eu",
+    });
+  });
+});
+
+describe("policy", () => {
+  it("reads every switch under the app's own prefix", () => {
+    const policy = readPolicy({ X_READ_ONLY: "true", X_ALLOW_DESTRUCTIVE: "0", X_TOOLSETS: "a, b", X_SURFACE: "search", X_TOOL_TIMEOUT_MS: "500" }, "X");
+    expect(policy).toMatchObject({ readOnly: true, allowDestructive: false, surface: "search", toolTimeoutMs: 500, confirm: "human" });
+    expect(readPolicy({ X_CONFIRM: "MODEL" }, "X").confirm).toBe("model");
+    expect(readPolicy({ X_CONFIRM: "maybe" }, "X", { confirm: "model" }).confirm).toBe("model");
+    expect([...(policy.toolsets as Set<string>)]).toEqual(["a", "b"]);
+    expect(readPolicy({}, "X").toolsets).toBe("all");
+  });
+
+  it("lets a default toolset follow an older switch in the environment", () => {
+    const defaults = { toolsets: (env: NodeJS.ProcessEnv) => (env.X_ENABLE_BETA === "1" ? ("all" as const) : []) };
+    expect([...(readPolicy({}, "X", defaults).toolsets as Set<string>)]).toEqual([]);
+    expect(readPolicy({ X_ENABLE_BETA: "1" }, "X", defaults).toolsets).toBe("all");
+    expect([...(readPolicy({ X_ENABLE_BETA: "1", X_TOOLSETS: "beta" }, "X", defaults).toolsets as Set<string>)]).toEqual(["beta"]);
+  });
+});
+
+describe("definitions", () => {
+  it("reject a tool that cannot work, at load time", () => {
+    const base = { title: "T", description: "A tool for testing definitions.", risk: "read" as const, handler: () => ({}) };
+    expect(() => defineTool({ ...base, name: "Bad-Name" })).toThrow("snake_case");
+    expect(() => defineTool({ ...base, name: "ok", positional: ["nope"] })).toThrow("positional 'nope'");
+    expect(() => slipway({ name: "x", version: "1", context: () => ({}), tools: [defineTool({ ...base, name: "a" }), defineTool({ ...base, name: "a" })] })).toThrow(
+      "two tools are named 'a'",
+    );
+  });
+
+  it("keep a class-based context's methods and getters in handlers", async () => {
+    class Client {
+      private readonly base = "https://api.example";
+      get origin() {
+        return this.base;
+      }
+      ping() {
+        return "pong";
+      }
+    }
+    const tool = defineTool<{ client: Client }>({
+      name: "probe",
+      title: "Probe",
+      description: "Return the client's origin and ping reply.",
+      risk: "read",
+      handler: (_args, ctx) => ({ origin: ctx.client.origin, reply: ctx.client.ping(), surface: ctx.surface }),
+    });
+    const app = slipway({ name: "probe", version: "1", context: () => ({ client: new Client() }), tools: [tool] });
+    expect(await app.invoke("probe", {}, { surface: "cli", env: {} })).toEqual({ origin: "https://api.example", reply: "pong", surface: "cli" });
+  });
+});

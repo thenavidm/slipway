@@ -1,0 +1,67 @@
+import { request as httpRequest } from "node:http";
+import { afterEach, describe, expect, it } from "vitest";
+import { serveHttpApp } from "../src/serve.js";
+import { createApp } from "./fixtures/notes.js";
+
+const initialize = {
+  jsonrpc: "2.0",
+  id: 1,
+  method: "initialize",
+  params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "test", version: "0" } },
+};
+
+let close: (() => Promise<void>) | undefined;
+afterEach(async () => {
+  await close?.();
+  close = undefined;
+});
+
+async function post(url: string, body: unknown, headers: Record<string, string> = {}) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
+    body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  const json = text.startsWith("{") ? JSON.parse(text) : JSON.parse(text.split("\n").find((line) => line.startsWith("data:"))!.slice(5));
+  return { status: response.status, json };
+}
+
+describe("HTTP transport", () => {
+  it("answers a 2025-era client over Streamable HTTP", async () => {
+    const served = await serveHttpApp(createApp(), {}, { host: "127.0.0.1", port: 0 });
+    close = served.close;
+    const { status, json } = await post(served.url, initialize);
+    expect(status).toBe(200);
+    expect(json.result.serverInfo).toMatchObject({ name: "notes" });
+    const health = await (await fetch(served.url.replace("/mcp", "/health"))).json();
+    expect(health).toMatchObject({ ok: true, name: "notes", tools: 9 });
+  });
+
+  it("requires the bearer token when one is set", async () => {
+    const served = await serveHttpApp(createApp(), {}, { host: "127.0.0.1", port: 0, token: "t0ken-value" });
+    close = served.close;
+    expect((await fetch(served.url, { method: "POST", body: "{}" })).status).toBe(401);
+    const { status } = await post(served.url, initialize, { authorization: "Bearer t0ken-value" });
+    expect(status).toBe(200);
+  });
+
+  it("refuses a request whose Host is not the loopback it is bound to", async () => {
+    const served = await serveHttpApp(createApp(), {}, { host: "127.0.0.1", port: 0 });
+    close = served.close;
+    const { port } = new URL(served.url);
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = httpRequest({ host: "127.0.0.1", port, path: "/mcp", method: "POST", headers: { host: "evil.example", "content-type": "application/json" } }, (res) => {
+        res.resume();
+        resolve(res.statusCode ?? 0);
+      });
+      req.on("error", reject);
+      req.end(JSON.stringify(initialize));
+    });
+    expect(status).toBe(403);
+  });
+
+  it("will not listen on a public address without a token", async () => {
+    await expect(serveHttpApp(createApp(), {}, { host: "0.0.0.0", port: 0 })).rejects.toThrow(/without NOTES_HTTP_TOKEN/);
+  });
+});

@@ -1,0 +1,49 @@
+name: CI
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  # Every push and pull request: Linux, on both supported Node lines. About 3 minutes.
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # The startup tests launch a built fixture server, so dist has to exist first.
+      - run: npm run build
+      - run: npm test
+      - run: node dist/bin.js --version
+
+  # Windows and macOS bill 2 and 10 times Linux's minutes on a private repo, so they
+  # run on a release tag or by hand from the Actions tab. A public repo runs them free.
+  platforms:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+        node: [22, 24]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+      - run: node dist/bin.js --version
