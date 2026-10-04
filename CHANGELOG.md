@@ -2,6 +2,10 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.1, 2026-10-04: a safer install check
+
+- **No stranger's package through npx.** An unrelated npm package owns the bare name `slipway`, so a bare `npx slipway` with nothing installed fetched and ran it. SKILL.md now checks the install with `npm ls @thenavidm/slipway`, and every command that may run before an install names the package: `npx -p @thenavidm/slipway slipway <command>`.
+
 ## 0.1.0, 2026-10-04: the first release
 
 - **One definition, two surfaces.** `defineTool` describes a tool once; `slipway()` ships it as an MCP server tool and a CLI command under the same name. Both surfaces send every call through one function, so validation, the write guard, timeouts, cancellation and redaction cannot differ between them.
