@@ -556,6 +556,14 @@ Every server reads these, under its own prefix: the app name in capitals, `NOTES
 
 See [CHANGELOG.md](CHANGELOG.md).
 
+## Servers built on Slipway
+
+| Server | Package | Covers |
+| --- | --- | --- |
+| [Teachable](https://github.com/thenavidm/teachable-mcp-cli) | [`@thenavidm/teachable-mcp-cli`](https://www.npmjs.com/package/@thenavidm/teachable-mcp-cli) 3.0.0 | Courses, users, enrollments, pricing, coupons and transactions |
+
+Each server was measured against its previous release before it moved: startup, what a client receives, CLI exit codes, and tokens in Claude Code and Codex. Its README has the numbers.
+
 ## 15. FAQ ❓
 
 <details>
