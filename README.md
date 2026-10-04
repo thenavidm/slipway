@@ -567,6 +567,7 @@ See [CHANGELOG.md](CHANGELOG.md).
 | Server | Package | Covers |
 | --- | --- | --- |
 | [Bluesky](https://github.com/thenavidm/bluesky-mcp-cli) | [`@thenavidm/bluesky-mcp-cli`](https://www.npmjs.com/package/@thenavidm/bluesky-mcp-cli) 2.0.0 | Posting, threads, replies, the timeline, search, feeds, lists, notifications and the social graph |
+| [Mastodon](https://github.com/thenavidm/mastodon-mcp-cli) | [`@thenavidm/mastodon-mcp-cli`](https://www.npmjs.com/package/@thenavidm/mastodon-mcp-cli) 2.0.0 | Posting, editing, threads, timelines, search, lists, notifications and following, on any instance |
 | [Teachable](https://github.com/thenavidm/teachable-mcp-cli) | [`@thenavidm/teachable-mcp-cli`](https://www.npmjs.com/package/@thenavidm/teachable-mcp-cli) 3.0.0 | Courses, users, enrollments, pricing, coupons and transactions |
 
 Each server was measured against its previous release before it moved: startup, what a client receives, CLI exit codes, and tokens in Claude Code and Codex. Its README has the numbers.
