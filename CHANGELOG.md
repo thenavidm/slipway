@@ -2,6 +2,10 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.22, 2026-10-05: what iMessage needed
+
+- **A person approving a call can read more than the audit log keeps.** The approval form showed the call's `summary`, the same line the audit log records. iMessage keeps a message's words out of its log, so its summary says "send a 15-character message to Ana", and a person approving the send in a form could not read what would go. A tool's new `detail`, a function of the arguments like `summary`, is shown in the form between the summary and what the call cannot undo, and never reaches the audit log or the refusal. A `detail` that throws, or says nothing, leaves the form as it was.
+
 ## 0.1.21, 2026-10-05: what Google Workspace needed
 
 - **Read-only mode can keep a raw tool for its reads.** `<PREFIX>_READ_ONLY=1` hides every write, and a tool whose `riskFor` decides each call still counts as its highest risk there. Google Workspace's `workspace_raw` reaches about 400 API methods, a GET among them only reads, and its own 0.2.2 kept it in read-only mode and refused each call that would write. On Slipway it disappeared. A write that sets `whenReadOnly: "reads"` now stays listed in read-only mode: the calls its `riskFor` puts at `read` run, and every other call is refused, confirmed or not, with a refusal that says the tool only reads while read-only mode is on and what the call was about to do. It needs `riskFor`, and without it a write is hidden as before.

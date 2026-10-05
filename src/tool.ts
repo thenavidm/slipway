@@ -155,6 +155,13 @@ export type ToolDefinition<Ctx, I extends Schema, O extends Schema | undefined> 
   tags?: string[];
   /** One line for the audit log and the refusal message: "post 'Hello' as @alice". */
   summary?: (args: InferOutput<I>) => string;
+  /**
+   * What the person approving a call reads under the summary, when it should
+   * say more than the audit log may keep: the words of a private message about
+   * to be sent. Only the approval form shows it; the audit log and the
+   * refusal keep to the summary.
+   */
+  detail?: (args: InferOutput<I>) => string;
   /** What --dry-run prints instead of running. Defaults to the validated arguments. */
   preview?: (args: InferOutput<I>, ctx: ToolContext<Ctx>) => unknown;
   examples?: ToolExample[];
@@ -223,6 +230,8 @@ export type Tool<Ctx = any> = {
   readonly schema: Schema;
   readonly output?: Schema;
   readonly summary?: (args: any) => string;
+  /** What the person approving a call reads under the summary. Never logged. */
+  readonly detail?: (args: any) => string;
   readonly preview?: (args: any, ctx: ToolContext<Ctx>) => unknown;
   readonly render?: (result: any) => string;
   readonly handler: (args: any, ctx: ToolContext<Ctx>) => unknown;
@@ -256,6 +265,7 @@ export function defineTool<Ctx = unknown, I extends Schema = Schema<Record<strin
     if (!TAG.test(tag)) throw new Error(`${where}: tag '${tag}' must be lowercase words joined by dashes.`);
   }
   if (typeof definition.handler !== "function") throw new Error(`${where}: handler is required.`);
+  if (definition.detail !== undefined && typeof definition.detail !== "function") throw new Error(`${where}: detail must be a function of the arguments.`);
   if (definition.spends && definition.risk === "read") throw new Error(`${where}: a read cannot spend; make it a write.`);
   if (definition.riskFor !== undefined) {
     if (typeof definition.riskFor !== "function") throw new Error(`${where}: riskFor must be a function of the arguments.`);
@@ -343,6 +353,7 @@ export function defineTool<Ctx = unknown, I extends Schema = Schema<Record<strin
     schema,
     output: definition.output ? advertised(definition.output as Schema) : undefined,
     summary: definition.summary as ((args: any) => string) | undefined,
+    ...(definition.detail ? { detail: definition.detail as (args: any) => string } : {}),
     preview: definition.preview as Tool<Ctx>["preview"],
     render: definition.render as ((result: any) => string) | undefined,
     handler: definition.handler as Tool<Ctx>["handler"],
@@ -380,6 +391,15 @@ export function summarize(tool: Pick<Tool, "summary" | "title">, args: Record<st
     return tool.summary?.(args)?.trim() || fallback;
   } catch {
     return fallback;
+  }
+}
+
+/** The approval form's words under the summary for one call, or nothing when the tool has none or they fail. */
+export function detailOf(tool: Pick<Tool, "detail">, args: Record<string, unknown>): string | undefined {
+  try {
+    return tool.detail?.(args)?.trim() || undefined;
+  } catch {
+    return undefined;
   }
 }
 

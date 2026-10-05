@@ -220,6 +220,7 @@ The context is built on the first call that needs it, never at startup, and so i
 | `idempotent`, `openWorld` | Annotation hints. Reads are idempotent by default; every tool is open world unless it never leaves the machine |
 | `tags` | Toolsets this tool belongs to. A tool with no tags is always on |
 | `summary` | One line for the refusal message and the audit log: "delete note 7" |
+| `detail` | What the person approving a call reads under the summary, and the audit log never keeps: the words of a private message about to be sent |
 | `preview` | What `--dry-run` prints. Defaults to the validated arguments |
 | `examples` | Arguments as a client sends them. Shown as runnable commands in help and checked by `slipway check` |
 | `positional` | Inputs that may be typed as bare words, in order |

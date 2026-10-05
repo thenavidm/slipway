@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { defineTool, slipway, z } from "../src/index.js";
 import { connect, type ElicitAnswer, type ElicitRequest, resultData } from "../src/testing.js";
 import { canAskPerson, confirmRoute, promptsItself } from "../src/confirm.js";
 import { createApp, createStore } from "./fixtures/notes.js";
@@ -214,5 +215,38 @@ describe("approvals cannot be faked or reused", () => {
       ["allowed", "client"],
       ["done", undefined],
     ]);
+  });
+});
+
+describe("what a person reads before approving", () => {
+  it("shows a tool's detail under the summary, and keeps it out of the audit log", async () => {
+    const log = join(mkdtempSync(join(tmpdir(), "slipway-detail-")), "audit.jsonl");
+    const sent: string[] = [];
+    const app = slipway({
+      name: "chat",
+      title: "Chat",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [
+        defineTool({
+          name: "send_message",
+          title: "Send a message",
+          description: "Send a private message, which cannot be unsent.",
+          input: z.object({ to: z.string(), text: z.string() }),
+          risk: "destructive",
+          consequence: "cannot be unsent",
+          summary: (args) => `send a ${args.text.length}-character message to ${args.to}`,
+          detail: (args) => `"${args.text}"`,
+          handler: (args) => (sent.push(args.text), { sent: true }),
+        }),
+      ],
+    });
+    const someone = person(approve);
+    const mcp = await connect(app, { env: { CHAT_AUDIT_LOG: log }, elicit: someone.elicit });
+    await mcp.callTool("send_message", { to: "Ana", text: "see you at noon" });
+    await mcp.close();
+    expect(someone.asked[0]!.message).toBe('Chat wants to send a 15-character message to Ana.\n\n"see you at noon"\n\nThis cannot be unsent.');
+    expect(sent).toEqual(["see you at noon"]);
+    expect(readFileSync(log, "utf8")).not.toContain("see you at noon");
   });
 });

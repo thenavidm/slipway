@@ -32,7 +32,7 @@ import type { App } from "./app.js";
 import { RefusedError } from "./errors.js";
 import { consequence, Guard, sentenceBody } from "./guard.js";
 import type { ConfirmMode } from "./policy.js";
-import type { Tool } from "./tool.js";
+import { detailOf, type Tool } from "./tool.js";
 import { phrase, sha256, stableJson, versionAtLeast } from "./util.js";
 
 /** The key of Slipway's approval form among a call's input requests. */
@@ -133,9 +133,9 @@ function callHash(tool: string, args: Record<string, unknown>): string {
  * form by itself (Codex accepts a form that has no fields), and one that fills
  * in defaults would otherwise approve with them.
  */
-export function approvalForm(appTitle: string, tool: Pick<Tool, "risk" | "consequence" | "spends">, summary: string) {
+export function approvalForm(appTitle: string, tool: Pick<Tool, "risk" | "consequence" | "spends">, summary: string, detail?: string) {
   return {
-    message: `${appTitle} wants to ${phrase(summary)}.\n\nThis ${consequence(tool)}.`,
+    message: `${appTitle} wants to ${phrase(summary)}.${detail ? `\n\n${detail}` : ""}\n\nThis ${consequence(tool)}.`,
     requestedSchema: {
       type: "object" as const,
       properties: {
@@ -169,7 +169,7 @@ export async function personApproval<Ctx>(
   if (!state || typeof state !== "object" || answer.kind === "missing") {
     const summary = app.preflight(tool, rawArgs, { surface: "mcp", env });
     guard.record(tool, summary, "asked a person");
-    const form = approvalForm(app.title, tool, summary);
+    const form = approvalForm(app.title, tool, summary, detailOf(tool, args));
     return inputRequired({
       requestState: await codec.mint({ t: tool.name, h: callHash(tool.name, args), n: randomUUID() }),
       inputRequests: { [APPROVAL_KEY]: inputRequired.elicit(form) },
