@@ -278,4 +278,14 @@ describe("search reads what a tool takes", () => {
   it("still ranks a name above an argument", () => {
     expect(searchTools(tools, "move a post")[0]?.tool.name).toBe("move_post");
   });
+
+  it("reads an argument by its own words, not through a synonym", () => {
+    // Google Photos: "photos" means media, and get_media_item takes a media_item_id, but the picker is the answer.
+    const photos = [
+      defineTool({ name: "get_media_item", title: "Get one media item", description: "Fetch a single media item by id. To reach anything else, use start_pick_session.", input: contract({ type: "object", properties: { media_item_id: { type: "string" } } }), risk: "read", handler: () => ({}) }),
+      defineTool({ name: "start_pick_session", title: "Start a photo picker session", description: "Open a picker so the user can choose photos from their library.", input: contract({ type: "object", properties: {} }), risk: "read", handler: () => ({}) }),
+    ];
+    const synonyms = { photos: ["media"], choose: ["pick"] };
+    expect(searchTools(photos, "let me choose photos", 10, synonyms)[0]?.tool.name).toBe("start_pick_session");
+  });
 });
