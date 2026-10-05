@@ -580,6 +580,7 @@ See [CHANGELOG.md](CHANGELOG.md).
 | [Substack](https://github.com/thenavidm/substack-mcp-cli) | [`@thenavidm/substack-mcp-cli`](https://www.npmjs.com/package/@thenavidm/substack-mcp-cli) 3.0.0 | Drafts, publishing and scheduling, Notes, subscribers, analytics, tags, comments and researching other publications |
 | [Teachable](https://github.com/thenavidm/teachable-mcp-cli) | [`@thenavidm/teachable-mcp-cli`](https://www.npmjs.com/package/@thenavidm/teachable-mcp-cli) 3.0.0 | Courses, users, enrollments, pricing, coupons and transactions |
 | [Threads](https://github.com/thenavidm/threads-mcp-cli) | [`@thenavidm/threads-mcp-cli`](https://www.npmjs.com/package/@thenavidm/threads-mcp-cli) 2.0.0 | Posting, threads, carousels, replies and reply approvals, insights and keyword search |
+| [TikTok](https://github.com/thenavidm/tiktok-mcp-cli) | [`@thenavidm/tiktok-mcp-cli`](https://www.npmjs.com/package/@thenavidm/tiktok-mcp-cli) 2.0.0 | Your own account's profile and videos, ranked by any metric, posting and drafts, through TikTok's official API |
 | [ThriveCart](https://github.com/thenavidm/thrivecart-mcp-cli) | [`@thenavidm/thrivecart-mcp-cli`](https://www.npmjs.com/package/@thenavidm/thrivecart-mcp-cli) 3.0.0 | Products and pricing, transactions and revenue, customers, subscriptions and affiliates, across several carts |
 
 Each server was measured against its previous release before it moved: startup, what a client receives, CLI exit codes, and tokens in Claude Code and Codex. Its README has the numbers.
