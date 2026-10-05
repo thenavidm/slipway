@@ -230,6 +230,34 @@ describe("advertised schemas", () => {
   });
 });
 
+describe("advertised records", () => {
+  it("leave out the propertyNames Zod 4 adds to every record, keep an argument by that name, and still validate", async () => {
+    const app = slipway({
+      name: "fields",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [
+        defineTool({
+          name: "set_fields",
+          title: "Set fields",
+          description: "Set custom fields on a post, by name, to the values given.",
+          input: z.object({ fields: z.record(z.string(), z.string()), propertyNames: z.string().optional() }),
+          risk: "write",
+          handler: (args) => args,
+        }),
+      ],
+    });
+    const mcp = await connect(app);
+    const [tool] = await mcp.listTools();
+    const properties = tool!.inputSchema.properties as Record<string, Record<string, unknown>>;
+    expect(properties.fields).toEqual({ type: "object", additionalProperties: { type: "string" } });
+    expect(properties.propertyNames).toEqual({ type: "string" });
+    const wrong = await mcp.callTool("set_fields", { fields: { a: 1 } });
+    await mcp.close();
+    expect(wrong.isError).toBe(true);
+  });
+});
+
 describe("a write whose arguments decide its risk, over MCP", () => {
   it("lists the highest risk, runs a draft without confirm, and refuses to publish without it", async () => {
     const app = slipway({

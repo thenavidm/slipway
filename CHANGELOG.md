@@ -2,6 +2,10 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.11, 2026-10-05: what WordPress needed
+
+- **Records no longer advertise `propertyNames`.** Zod 4 gives every `z.record` `propertyNames: { type: "string" }`, which every JSON object key already is, and the Zod 3 converters never wrote it. Slipway leaves it out of what clients receive, as it does the safe-integer bounds, and validation still runs on the schema itself. Each one cost 8 tokens; WordPress has nine. An argument that happens to be named `propertyNames` is a name, so it stays.
+
 ## 0.1.10, 2026-10-05: what TikTok needed
 
 - **`destructiveOff: "hide"`: a server can take its irreversible tools off the list when they are off.** By default `<PREFIX>_ALLOW_DESTRUCTIVE=0` keeps them listed and refuses each call. With `defaults: { destructiveOff: "hide" }` they leave the MCP tool list and the command list, as read-only mode does with every write, and calling one anyway is refused with the setting to unset. TikTok 1.1 hid its publishing tools this way, and keeps doing so.

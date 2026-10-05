@@ -117,21 +117,33 @@ export const CONFIRM_DESCRIPTION = "Set true only when the user asked for exactl
 /** The schema already carries the range and the default, so the words only say what the number is for. */
 export const WAIT_DESCRIPTION = "Seconds to wait for the job to finish before returning it to check later.";
 
+/** Keywords whose keys are names the author chose, not keywords. */
+const NAMED = new Set(["properties", "patternProperties", "$defs", "definitions", "dependentSchemas"]);
+
 /**
  * Zod 4 gives every whole number the safe-integer bounds, `maximum:
- * 9007199254740991` and its negative, unless the schema sets its own. They say
- * nothing a client can use, so they are left out of what it receives.
- * Validation still runs on the schema itself.
+ * 9007199254740991` and its negative, unless the schema sets its own, and
+ * every record `propertyNames: { type: "string" }`, which every JSON object key
+ * already is. They say nothing a client can use, so they are left out of what
+ * it receives. Validation still runs on the schema itself. An argument that
+ * happens to be named `propertyNames` or `maximum` is a name, so it stays.
  */
-function withoutSafeIntegerBounds(node: unknown): unknown {
-  if (Array.isArray(node)) return node.map(withoutSafeIntegerBounds);
+function withoutNoise(node: unknown, named = false): unknown {
+  if (Array.isArray(node)) return node.map((item) => withoutNoise(item));
   if (node === null || typeof node !== "object") return node;
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(node)) {
-    if ((key === "maximum" && value === Number.MAX_SAFE_INTEGER) || (key === "minimum" && value === Number.MIN_SAFE_INTEGER)) continue;
-    out[key] = withoutSafeIntegerBounds(value);
+    if (!named) {
+      if ((key === "maximum" && value === Number.MAX_SAFE_INTEGER) || (key === "minimum" && value === Number.MIN_SAFE_INTEGER)) continue;
+      if (key === "propertyNames" && isPlainString(value)) continue;
+    }
+    out[key] = withoutNoise(value, !named && NAMED.has(key));
   }
   return out;
+}
+
+function isPlainString(value: unknown): boolean {
+  return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && (value as { type?: unknown }).type === "string";
 }
 
 /**
@@ -143,7 +155,7 @@ export function advertised<I, O>(schema: Schema<I, O>): Schema<I, O> {
   const std = schema["~standard"];
   const plain = (json: JsonSchema): JsonSchema => {
     const { $schema: _dialect, ...rest } = json;
-    return withoutSafeIntegerBounds(rest) as JsonSchema;
+    return withoutNoise(rest) as JsonSchema;
   };
   return {
     "~standard": {
