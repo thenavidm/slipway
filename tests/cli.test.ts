@@ -48,6 +48,17 @@ describe("CLI: discovery", () => {
     expect(run.stdout.split("\n")[0]).toContain("delete-note");
   });
 
+  it("answers with the help of a command well ahead of the rest, and only the list otherwise", async () => {
+    // Asking which and then <command> --help cost Codex a request that guessing the name had saved.
+    const tool = (name: string, title: string) => defineTool({ name, title, description: `${title} for the account.`, input: z.object({ id: z.string().describe("Its id.") }), risk: "read", handler: () => ({}) });
+    const app = slipway({ name: "probe", version: "1.0.0", context: () => ({}), tools: [tool("refund_sale", "Refund a sale"), tool("list_sales", "List sales"), tool("get_sale", "Get a sale"), tool("get_sale_report", "Get a sale report")] });
+    const clear = (await cli(app, ["which", "refund"])).stdout;
+    expect(clear).toContain("Usage:");
+    expect(clear).toContain("probe-cli refund-sale <id>");
+    const close = (await cli(app, ["which", "get", "a", "sale"])).stdout;
+    expect(close).not.toContain("Usage:");
+  });
+
   it("says a title once when the description opens with it", async () => {
     const tool = (title: string, description: string) => defineTool({ name: title.toLowerCase().replace(/\W+/g, "_"), title, description, risk: "read", handler: () => ({}) });
     const app = slipway({
@@ -76,10 +87,13 @@ describe("CLI: discovery", () => {
       context: () => ({}),
       tools: [defineTool({ name: "publish_staged", title: "Publish a staged post", description: "Publish a post that was staged earlier, by its container id.", risk: "write", handler: () => ({}) }), ...tools],
     });
-    const lines = (await cli(app, ["which", "publish", "a", "staged", "post"])).stdout.trim().split("\n");
+    const out = (await cli(app, ["which", "publish", "a", "staged", "post"])).stdout;
+    const lines = out.split("\n\n")[0]!.trim().split("\n");
     expect(lines[0]).toContain("publish-staged");
     // Twelve tools mention a post; the weak matches past the third are left out.
     expect(lines.length).toBe(3);
+    // publish-staged is well ahead of the reports, so its help comes with the answer.
+    expect(out).toContain("Usage:");
     const json = JSON.parse((await cli(app, ["which", "publish", "a", "staged", "post", "--json"])).stdout);
     expect(json).toHaveLength(3);
   });

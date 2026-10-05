@@ -261,7 +261,15 @@ async function runBuiltin(app: App, io: CliIO, command: string, rest: string[], 
         return print(io, json(globals, matches.map(({ tool, score }) => ({ command: tool.command, title: tool.title, risk: tool.risk, score: Number(score.toFixed(2)) }))));
       }
       if (!matches.length) return print(io, `No command matches '${query}'. Run \`${app.bins.cli}\` to see them all.`);
-      return print(io, matches.map(({ tool }) => toolLine(tool)).join("\n"));
+      const list = matches.map(({ tool }) => toolLine(tool)).join("\n");
+      // One command well ahead of the rest comes with its help, so finding a command and its flags is
+      // one step: on Lemon Squeezy, `which cancel subscription` and then `cancel-subscription --help`
+      // cost Codex a request its 2.x CLI had saved by guessing the name, and each request carries the
+      // whole conversation. A close second gets the list alone: Gumroad's `which refund` fits refunding
+      // a sale and its refund policy alike, and the help shown would be a guess between them.
+      const [first, second] = matches;
+      if (first && (!second || first.score >= second.score * 1.5)) return print(io, `${list}\n${renderToolHelp(first.tool, io.bin, app.definition.flagAliases)}`);
+      return print(io, list);
     }
     case "doctor":
       return runDoctor(app, io, { network: rest.includes("--network"), json: globals.format !== "auto" });

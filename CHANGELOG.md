@@ -2,6 +2,10 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.19, 2026-10-05: what Lemon Squeezy needed
+
+- **`which` answers with a command's help when one fits well ahead of the rest.** An agent asked `which` for the command and then read that command's `--help`, and each request carries the whole conversation. On Lemon Squeezy, `which cancel subscription` and then `cancel-subscription --help` cost Codex a median of 83,076 input tokens, where its 2.x CLI guessed the command's name and read its help in two requests for 61,541. When the first answer scores at least half again as much as the second, its help now follows the list, and three runs took 61,903, 61,913 and 61,908 in two requests. A close second gets the list alone: Gumroad's `which refund` fits refunding a sale and its refund policy alike, and the help shown would be a guess between them.
+
 ## 0.1.18, 2026-10-05: what Wistia and Testimonial.to needed
 
 - **A command's help never lists `--confirm` as the only required flag.** Wistia's import takes its URL as a flag or inside `--payload`, so no flag is required, and its help showed a Required section holding only `--confirm`. That reads as if nothing else were needed: every Codex run then read the command's schema as well, and finding the command and its flags cost a median of 105,140 input tokens, where Wistia's own 2.x CLI cost 86,365. Alone, `--confirm` now closes the options, where 2.x listed it, and the usage line still ends with it; two runs then took 83,069 and 82,817.

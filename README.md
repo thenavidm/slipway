@@ -390,7 +390,7 @@ Override any operation's name or risk with `names` and `risk`, keep a subset wit
 | `<cli>` | Every command, grouped by toolset, writes marked |
 | `<cli> <command> [flags]` | Run one tool |
 | `<cli> <command> --help` | Its flags, choices, defaults, examples and risk |
-| `<cli> which <words>` | Find the command for a task, by what it does. An app's `synonyms` add the words its users type: `{ picture: ["image"] }` |
+| `<cli> which <words>` | Find the command for a task, by what it does, with its help when one fits well ahead of the rest. An app's `synonyms` add the words its users type: `{ picture: ["image"] }` |
 | `<cli> schema <command>` | The JSON Schema an MCP client receives. `--output` for the result's |
 | `<cli> agent-context` | Commands, flags, risk, examples, exit codes and settings as JSON. `--brief` for just the commands, which ones write or need `--confirm`, and the exit codes |
 | `<cli> doctor` | Check the setup. `--network` also calls the service, which an app with `doctorNetwork` does every time |
