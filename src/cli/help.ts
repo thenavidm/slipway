@@ -305,7 +305,16 @@ export function renderGeneralHelp(app: App, bin: string): string {
   return lines.join("\n");
 }
 
-/** One line per tool, for search results and listings. */
+/** One line per tool, for search results: the title, then what the description adds to it. */
 export function toolLine(tool: Tool): string {
-  return `${riskMark(tool)} ${tool.command}  ${tool.title}: ${firstSentence(tool.description, 80)}`;
+  const sentence = firstSentence(tool.description, 80);
+  // Many descriptions open by saying the title again, which an agent would read twice.
+  const what = !sentence ? tool.title : restates(sentence, tool.title) ? sentence : `${tool.title}: ${sentence}`;
+  return `${riskMark(tool)} ${tool.command}  ${what}`;
+}
+
+/** Whether a sentence opens with a title's words, whatever the case and punctuation. */
+function restates(sentence: string, title: string): boolean {
+  const words = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return words(sentence).startsWith(words(title));
 }

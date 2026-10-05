@@ -48,6 +48,24 @@ describe("CLI: discovery", () => {
     expect(run.stdout.split("\n")[0]).toContain("delete-note");
   });
 
+  it("says a title once when the description opens with it", async () => {
+    const tool = (title: string, description: string) => defineTool({ name: title.toLowerCase().replace(/\W+/g, "_"), title, description, risk: "read", handler: () => ({}) });
+    const app = slipway({
+      name: "probe",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [
+        tool("Generate images", "Generate images. Consumes credits."),
+        tool("Get a report", "Get a report on one post, with its totals."),
+        tool("List forms", "Read every form on the site."),
+      ],
+    });
+    const line = async (...words: string[]) => (await cli(app, ["which", ...words])).stdout.split("\n")[0];
+    expect(await line("generate", "images")).toBe("  generate-images  Generate images.");
+    expect(await line("report", "totals")).toBe("  get-a-report  Get a report on one post, with its totals.");
+    expect(await line("list", "forms")).toBe("  list-forms  List forms: Read every form on the site.");
+  });
+
   it("lists only the close matches, at least three, so the answer costs less to read than the list", async () => {
     const tools = Array.from({ length: 12 }, (_, i) =>
       defineTool({ name: `get_post_report_${i}`, title: `Get post report ${i}`, description: `Read the report on post number ${i}, with its totals.`, risk: "read", handler: () => ({}) }),

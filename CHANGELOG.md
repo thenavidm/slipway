@@ -2,6 +2,10 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.16, 2026-10-05: what Flodesk needed
+
+- **`which` says a title once.** Each answer line printed a tool's title and then the first sentence of its description, and many descriptions open with the title itself: 24 of Flodesk's 32 tools, 10 of Firefly's 14, and nearly every tool on Beehiiv, Calendly and Circle. Where the sentence opens with the title's words, the line now prints the sentence alone. Flodesk's answer to `which add a subscriber to a segment` goes from 52 tokens to 36 and Firefly's to `which image model 5` from 90 to 77, and an agent carries that answer through each step after it. A description that adds something new still follows its title.
+
 ## 0.1.15, 2026-10-05: what Adobe Firefly needed
 
 - **The general help counts the tuning settings instead of naming them.** An agent reads `--help` first and carries it through every later step, so its length is paid again on each one. Firefly's help named 14 settings on its last line, and with only 14 commands its whole command list was shorter; its Codex CLI task cost 370 more input tokens on Slipway than on its own 2.x CLI. The line now says how many more settings there are and that `agent-context` describes each, the `--http` settings join that count, and the safety switches and the settings an app marks as setup are still named. Every server's help is shorter by the names it had on that line.
