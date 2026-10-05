@@ -2,6 +2,10 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.14, 2026-10-05: what Buffer needed
+
+- **`which` and the search surface read what a tool takes.** Argument names count for a little less than the title and more than the description, and camelCase is split, so `channelId` reads as "channel" and `createPost` as "create post". Buffer's "schedule a post to a channel" never listed `create-post`, whose description says neither word but whose `channelId` and `schedulingType` say both; a Codex run that asked `which` then read the whole command list as well.
+
 ## 0.1.13, 2026-10-05: what Beehiiv needed
 
 - **`jsonSchema(schema, { shareRepeats: true })` writes each repeated part of a contract schema once.** A schema generated from an API contract often spells one definition out everywhere it is used. Beehiiv's post body repeats its block styling in each of 33 block types and carries the body twice, as its own fields and as `payload`, so its create-post tool advertised 387 KB. With each repeated part under `$defs` and referred to with `$ref`, it is 40 KB, and Beehiiv's 117 tools together go from 1,684 KB to 308 KB. Nothing is lost: each part reads the same once the references are followed, Claude Code and Codex both read fields that appear only under `$defs`, and validation accepts and refuses the same arguments. Definitions take the name of the property or block type they came from, such as `paragraph` or `visual_settings`, and parts under 200 bytes stay inline. The work is linear in the schema's size and happens when the tool is first listed. `shareRepeats()` is exported for a schema built some other way.

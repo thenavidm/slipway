@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { flagsFor, parseToolArgs } from "../src/cli/flags.js";
 import { formatOutput, selectFields } from "../src/cli/output.js";
 import { EXIT, httpError, toSlipwayError } from "../src/errors.js";
-import { defineTool, Secrets, slipway, z } from "../src/index.js";
+import { defineTool, jsonSchema as contract, Secrets, slipway, z } from "../src/index.js";
+import { searchTools } from "../src/search.js";
 import { readPolicy } from "../src/policy.js";
 import { inputJsonSchema, jsonSchema, resolveLocalRef, shareRepeats, type JsonSchema } from "../src/schema.js";
 
@@ -257,5 +258,24 @@ describe("flags through references", () => {
     expect(by.blocks).toMatchObject({ kind: "json", repeatable: true });
     expect(by.look).toMatchObject({ kind: "json", help: "How it looks." });
     expect(by.size).toMatchObject({ kind: "enum", choices: ["s", "m"], help: "How big." });
+  });
+});
+
+describe("search reads what a tool takes", () => {
+  const tool = (name: string, title: string, properties: Record<string, unknown>) =>
+    defineTool({ name, title, description: `${title}.`, input: contract({ type: "object", properties }), risk: "write", handler: () => ({}) });
+  const tools = [
+    tool("create_post", "Create a new post", { channelId: { type: "string" }, schedulingType: { type: "string" }, text: { type: "string" } }),
+    tool("move_post", "Move a post", { postId: { type: "string" } }),
+    tool("list_tags", "List tags", {}),
+  ];
+
+  it("finds a tool by its arguments, split where camelCase joins words", () => {
+    const [first] = searchTools(tools, "schedule a post to a channel");
+    expect(first?.tool.name).toBe("create_post");
+  });
+
+  it("still ranks a name above an argument", () => {
+    expect(searchTools(tools, "move a post")[0]?.tool.name).toBe("move_post");
   });
 });

@@ -18,6 +18,8 @@ const STOP_WORDS = new Set([
 
 function words(text: string): string[] {
   return text
+    // camelCase splits, so `channelId` reads as "channel id" and `createPost` as "create post".
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((word) => word.length > 1)
@@ -97,11 +99,13 @@ export function searchTools(tools: readonly Tool[], query: string, limit = 10, s
     const title = words(tool.title);
     const tags = tool.tags.flatMap(words);
     const description = words(tool.description);
+    // What a tool takes says what it is for: `channelId` and `schedulingType` find the post tool for "schedule a post to a channel".
+    const args = Object.keys((tool.jsonSchema.properties as Record<string, unknown> | undefined) ?? {}).filter((key) => key !== "confirm").flatMap(words);
     let score = 0;
     let matched = 0;
     for (const term of terms) {
       // A term that is the tool's name is not a hint, it is the answer.
-      const got = (named(tool, term) ? 20 : 0) + hits(term, name, extra) * 5 + hits(term, title, extra) * 4 + hits(term, tags, extra) * 3 + hits(term, description, extra);
+      const got = (named(tool, term) ? 20 : 0) + hits(term, name, extra) * 5 + hits(term, title, extra) * 4 + hits(term, tags, extra) * 3 + hits(term, args, extra) * 2 + hits(term, description, extra);
       if (got > 0) matched++;
       score += got;
     }
