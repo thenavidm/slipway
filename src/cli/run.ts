@@ -150,7 +150,7 @@ export async function runCli(app: App, argv: readonly string[], partial: Partial
   const builtin = command !== undefined && (BUILTINS as readonly string[]).includes(command);
   const custom = command !== undefined && !builtin ? app.definition.commands?.find((candidate) => candidate.name === command) : undefined;
   const tool = command !== undefined && !builtin && !custom ? app.find(command) : undefined;
-  const reserved = new Set(tool ? flagsFor(tool.jsonSchema).map((flag) => flag.flag) : []);
+  const reserved = new Set(tool ? flagsFor(tool.jsonSchema).map((flag) => flag.flag) : (custom?.flags ?? []));
   let agent = argv.includes("--agent");
 
   try {
@@ -165,7 +165,7 @@ export async function runCli(app: App, argv: readonly string[], partial: Partial
 
     if (builtin) return await runBuiltin(app, io, command, rest, globals);
     if (custom) {
-      if (globals.help) return print(io, `\nUsage: ${io.bin} ${custom.usage ?? custom.name}\n\n${custom.help}\n`);
+      if (globals.help) return print(io, `\nUsage: ${io.bin} ${custom.usage ?? custom.name}\n\n${sentence(custom.help)}\n`);
       return await custom.run(io, rest);
     }
 
@@ -173,7 +173,7 @@ export async function runCli(app: App, argv: readonly string[], partial: Partial
       const candidates = [...app.tools(io.env).map((t) => t.command), ...BUILTINS, ...(app.definition.commands ?? []).map((c) => c.name)];
       const guess = didYouMean(command, candidates);
       throw new UsageError(`Unknown command '${command}'.${guess ? ` Did you mean '${guess}'?` : ""}`, {
-        hint: `Run \`${app.bins.cli}\` to list commands, or \`${io.bin} which <words>\` to find one.`,
+        hint: `Run \`${app.bins.cli}\` to list commands, or \`${app.bins.cli} which <words>\` to find one.`,
       });
     }
 
@@ -188,12 +188,12 @@ export async function runCli(app: App, argv: readonly string[], partial: Partial
       );
     }
 
-    if (globals.help) return print(io, renderToolHelp(tool, io.bin));
+    if (globals.help) return print(io, renderToolHelp(tool, io.bin, app.definition.flagAliases));
     return await runTool(app, io, tool, rest, globals);
   } catch (error) {
     const failure = toSlipwayError(error);
     emitError(io, app, failure, agent);
-    if (failure.code === "usage" && tool && !agent && io.isTTY) io.stderr(renderToolHelp(tool, io.bin));
+    if (failure.code === "usage" && tool && !agent && io.isTTY) io.stderr(renderToolHelp(tool, io.bin, app.definition.flagAliases));
     return failure.exitCode;
   }
 }
@@ -216,7 +216,9 @@ async function runBuiltin(app: App, io: CliIO, command: string, rest: string[], 
   // `<built-in> --help` explains the command instead of running it.
   if (globals.help && command === "install") return print(io, (await import("./install.js")).installHelp(app, io.bin));
   const login = app.definition.login;
-  if (globals.help && command === "login" && typeof login === "object") return print(io, `\nUsage: ${io.bin} ${login.usage ?? "login"}\n\n${login.help}\n`);
+  if (globals.help && command === "login" && typeof login === "object") return print(io, `\nUsage: ${io.bin} ${login.usage ?? "login"}\n\n${sentence(login.help)}\n`);
+  // Printed steps are their own help.
+  if (globals.help && command === "login" && typeof login === "string") return print(io, login);
   if (globals.help && command !== "help") return print(io, renderGeneralHelp(app, io.bin));
   const target = rest.find((token) => !token.startsWith("-"));
   switch (command) {
@@ -228,7 +230,7 @@ async function runBuiltin(app: App, io: CliIO, command: string, rest: string[], 
       if (!target) return print(io, renderGeneralHelp(app, io.bin));
       const tool = app.find(target);
       if (!tool) throw new UsageError(`Unknown command '${target}'.`, { hint: `Run \`${app.bins.cli}\` to list commands.` });
-      return print(io, renderToolHelp(tool, io.bin));
+      return print(io, renderToolHelp(tool, io.bin, app.definition.flagAliases));
     }
     case "schema": {
       const tool = target ? app.find(target) : undefined;
@@ -246,7 +248,7 @@ async function runBuiltin(app: App, io: CliIO, command: string, rest: string[], 
       if (!query) throw new UsageError("which expects the words for what you want to do: which schedule a post");
       // Only the close matches: on Threads the right command scored 20 and the eighth 9, and the
       // ten-line list cost an agent more to read than the answer was worth.
-      const found = searchTools(app.tools(io.env), query, 10);
+      const found = searchTools(app.tools(io.env), query, 10, app.definition.synonyms);
       const best = found[0]?.score ?? 0;
       const matches = found.filter(({ score }, index) => index < 3 || score >= best / 2);
       if (globals.format !== "auto") {
@@ -289,7 +291,7 @@ async function readInput(io: CliIO, raw: string): Promise<Record<string, unknown
 async function runTool(app: App, io: CliIO, tool: Tool, rest: string[], globals: Globals): Promise<number> {
   const flags = flagsFor(tool.jsonSchema);
   const base = globals.input ? await readInput(io, globals.input) : {};
-  const args = { ...base, ...parseToolArgs(rest, flags, tool.positional) };
+  const args = { ...base, ...parseToolArgs(rest, flags, tool.positional, app.definition.flagAliases) };
   if (globals.confirm && tool.requireConfirm) args.confirm = true;
 
   const missing = missingRequired(flags, args).filter((flag) => !(globals.all && tool.paginate && flag.key === tool.paginate.cursorArg));
@@ -375,4 +377,11 @@ function writeOut(io: CliIO, globals: Globals, tool: Tool, result: unknown): num
   }
   io.stdout(`${JSON.stringify({ saved: globals.out, bytes: Buffer.byteLength(text) })}\n`);
   return EXIT.ok;
+}
+
+/** A help line written for the command table reads as a sentence on its own `--help` page. */
+function sentence(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+  return `${trimmed[0]!.toUpperCase()}${trimmed.slice(1)}${/[.!?:]$/.test(trimmed) ? "" : "."}`;
 }

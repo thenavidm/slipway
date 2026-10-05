@@ -102,6 +102,11 @@ export type CliCommand = {
   usage?: string;
   /** One line: what it does. */
   help: string;
+  /**
+   * Flags the command reads itself, such as `--out`, which would otherwise be
+   * taken as Slipway's global flag of the same name before the command sees it.
+   */
+  flags?: readonly string[];
   run: (io: CliIO, args: string[]) => number | Promise<number>;
 };
 
@@ -162,6 +167,19 @@ export type AppDefinition<Ctx> = {
    * `agent-context`, so nobody has to guess that it takes an instance.
    */
   login?: string | LoginFlow | { usage?: string; help: string; run: LoginFlow };
+  /**
+   * Other names a flag answers to, on every command that has the input:
+   * `{ ar: "aspect" }` lets `--ar 16:9` set `aspect`, as Midjourney's own
+   * syntax spells it. Help shows each beside its flag, and `slipway check`
+   * fails one that no tool's input can take.
+   */
+  flagAliases?: Readonly<Record<string, string>>;
+  /**
+   * Words people type, mapped onto words the tools use, for `which` and the
+   * search surface: `{ picture: ["image"] }`. Without them a lookup works only
+   * for someone who already knows the vocabulary.
+   */
+  synonyms?: Readonly<Record<string, readonly string[]>>;
   /**
    * Terminal commands beyond the tools, such as `logout`, `auth` or `refresh`.
    * An MCP client never sees them. Each is listed in help and `agent-context`,

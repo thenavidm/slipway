@@ -56,7 +56,13 @@ export async function afterStart(app: App, env: NodeJS.ProcessEnv, log: Logger):
   }
 }
 
-export type HttpOptions = { host: string; port: number; token?: string };
+export type HttpOptions = {
+  host: string;
+  port: number;
+  token?: string;
+  /** Browser origins beyond localhost that may call the server, from `<PREFIX>_HTTP_ALLOWED_ORIGINS`. */
+  allowedOrigins?: readonly string[];
+};
 
 export function httpOptions(app: App, env: NodeJS.ProcessEnv, argv: string[]): HttpOptions {
   const at = argv.findIndex((token) => token === "--port" || token.startsWith("--port="));
@@ -67,10 +73,22 @@ export function httpOptions(app: App, env: NodeJS.ProcessEnv, argv: string[]): H
     host: env[`${app.envPrefix}_HTTP_HOST`]?.trim() || "127.0.0.1",
     port,
     token: env[`${app.envPrefix}_HTTP_TOKEN`]?.trim() || undefined,
+    allowedOrigins: (env[`${app.envPrefix}_HTTP_ALLOWED_ORIGINS`] ?? "")
+      .split(",")
+      .map((origin) => origin.trim().replace(/\/$/, ""))
+      .filter(Boolean),
   };
 }
 
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+
+function localOrigin(origin: string): boolean {
+  try {
+    return LOOPBACK.has(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Serve over Streamable HTTP, for a machine that is always on.
@@ -130,6 +148,17 @@ async function handle(
   // stops a site that resolves its own name to 127.0.0.1 from reaching this server.
   if (loopback && !LOOPBACK.has(url.hostname)) {
     res.writeHead(403, { "content-type": "application/json" }).end(JSON.stringify({ error: "forbidden host" }));
+    return;
+  }
+
+  // The MCP transport spec asks every server to check Origin: a page on another
+  // site can send a request here that a browser lets through, and only the
+  // Origin header says where it came from. Clients that are not browsers send none.
+  const origin = req.headers.origin;
+  if (origin && !localOrigin(origin) && !(options.allowedOrigins ?? []).includes(origin.replace(/\/$/, ""))) {
+    res.writeHead(403, { "content-type": "application/json" }).end(
+      JSON.stringify({ error: `Origin ${origin} is not allowed. Add it to ${app.envPrefix}_HTTP_ALLOWED_ORIGINS if this is deliberate.` }),
+    );
     return;
   }
 

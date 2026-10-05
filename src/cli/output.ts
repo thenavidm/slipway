@@ -22,6 +22,18 @@ export type OutputOptions = { format: Format; select?: string[] };
 export function selectFields(data: unknown, paths: readonly string[]): unknown {
   if (Array.isArray(data)) return data.map((item) => selectFields(item, paths));
   if (data === null || typeof data !== "object") return data;
+  const record = data as Record<string, unknown>;
+  // `--select id,status` on `{ count, jobs: [...] }` means the jobs' fields. When no path
+  // starts at the top and the result holds one list of records, select inside it and keep
+  // the rest as it is. A list of plain values, such as image URLs, is not a result set.
+  const heads = paths.map((path) => path.split(".")[0]).filter((head): head is string => Boolean(head));
+  if (heads.length && heads.every((head) => !(head in record))) {
+    const isRecord = (item: unknown) => item !== null && typeof item === "object" && !Array.isArray(item);
+    const arrays = Object.entries(record).filter(([, value]) => Array.isArray(value)) as Array<[string, unknown[]]>;
+    const lists = arrays.filter(([, value]) => value.length > 0 && value.every(isRecord));
+    const only = lists.length === 1 ? lists[0] : lists.length === 0 && arrays.length === 1 && arrays[0]![1].length === 0 ? arrays[0] : undefined;
+    if (only) return { ...record, [only[0]]: only[1].map((item) => selectFields(item, paths)) };
+  }
   // Grouped by first segment: assigning one path at a time let the last path win,
   // so `--select posts.uri,posts.text` returned only the text.
   const byHead = new Map<string, string[]>();

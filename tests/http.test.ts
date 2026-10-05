@@ -99,3 +99,19 @@ describe("onServe", () => {
     expect(served).toBe(0);
   });
 });
+
+describe("HTTP Origin check", () => {
+  it("refuses a browser request from another site, unless the operator allowed that origin", async () => {
+    const served = await serveHttpApp(createApp(), {}, { host: "127.0.0.1", port: 0, allowedOrigins: ["https://studio.example"] });
+    close = served.close;
+    const status = async (origin?: string) => (await post(served.url, initialize, origin ? { origin } : {})).status;
+    expect(await status("https://evil.example")).toBe(403);
+    expect(await status("http://localhost:5173")).toBe(200);
+    expect(await status("https://studio.example")).toBe(200);
+    expect(await status()).toBe(200);
+  });
+
+  it("reads the allowed origins from <PREFIX>_HTTP_ALLOWED_ORIGINS", () => {
+    expect(httpOptions(createApp(), { NOTES_HTTP_ALLOWED_ORIGINS: "https://a.example, https://b.example/" }, ["--http"]).allowedOrigins).toEqual(["https://a.example", "https://b.example"]);
+  });
+});

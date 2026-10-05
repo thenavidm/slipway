@@ -175,7 +175,7 @@ function registerSearchSurface<Ctx>(server: McpServer, app: App<Ctx>, env: NodeJ
       annotations: { title: "Find a tool", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ query, limit }) => {
-      const matches = searchTools(visible(), query, limit ?? 10).map(({ tool }) => ({
+      const matches = searchTools(visible(), query, limit ?? 10, app.definition.synonyms).map(({ tool }) => ({
         name: tool.name,
         title: tool.title,
         risk: tool.risk,

@@ -214,6 +214,7 @@ The context is built on the first call that needs it, never at startup, and so i
 | `risk` | `read`, `write` (easy to undo) or `destructive` (public, irreversible, or both) |
 | `requireConfirm` | Defaults to true for destructive tools. Set it on a write that spends money |
 | `riskFor` | `(args) => risk`, when the arguments decide it: publishing is destructive, saving a draft is a write. `risk` stays the highest, which clients see; the guard, confirmation and audit log go by the call |
+| `spends` | The call spends money or credits, a paid generation: it needs confirming, `<PREFIX>_ALLOW_DESTRUCTIVE=0` refuses it, and the CLI marks it `$`, while clients still see a write |
 | `consequence` | What a confirmed call does, in the tool's own words for the refusal and the approval form: "moves money and cannot be undone". Defaults to "is public or cannot be undone" |
 | `idempotent`, `openWorld` | Annotation hints. Reads are idempotent by default; every tool is open world unless it never leaves the machine |
 | `tags` | Toolsets this tool belongs to. A tool with no tags is always on |
@@ -387,7 +388,7 @@ Override any operation's name or risk with `names` and `risk`, keep a subset wit
 | `<cli>` | Every command, grouped by toolset, writes marked |
 | `<cli> <command> [flags]` | Run one tool |
 | `<cli> <command> --help` | Its flags, choices, defaults, examples and risk |
-| `<cli> which <words>` | Find the command for a task, by what it does |
+| `<cli> which <words>` | Find the command for a task, by what it does. An app's `synonyms` add the words its users type: `{ picture: ["image"] }` |
 | `<cli> schema <command>` | The JSON Schema an MCP client receives. `--output` for the result's |
 | `<cli> agent-context` | Commands, flags, risk, examples, exit codes and settings as JSON. `--brief` for just the commands, which ones write or need `--confirm`, and the exit codes |
 | `<cli> doctor` | Check the setup. `--network` also calls the service, which an app with `doctorNetwork` does every time |
@@ -397,7 +398,7 @@ Override any operation's name or risk with `names` and `risk`, keep a subset wit
 | `<cli> <command>` from `commands` | A terminal command the app adds, such as `logout`. Listed in help and `agent-context`, never sent to an MCP client |
 | `<cli> completion bash` | Tab completion for bash, zsh or fish |
 
-Flags come from the schema: `--flag value`, `--flag=value`, the underscore spelling, `--no-flag` for a boolean, repeated or comma-separated lists of numbers and choices, and JSON or `@file.json` for an object. `--input` takes every argument as one JSON object, from the flag, a file or stdin, and flags on the same line override it.
+Flags come from the schema: `--flag value`, `--flag=value`, the underscore spelling, any name an app's `flagAliases` gives (`{ ar: "aspect" }` for `--ar 16:9`), `--no-flag` for a boolean, repeated or comma-separated lists of numbers and choices, and JSON or `@file.json` for an object. `--input` takes every argument as one JSON object, from the flag, a file or stdin, and flags on the same line override it.
 
 | Output flag | Shape |
 |---|---|
@@ -406,7 +407,7 @@ Flags come from the schema: `--flag value`, `--flag=value`, the underscore spell
 | `--jsonl` | One JSON value per line, for lists |
 | `--csv`, `--tsv` | A table, for lists of records |
 | `--quiet` | One value per line: ids, or the one `--select` field |
-| `--select a,b.c` | Keep only these fields. Dotted paths descend into arrays |
+| `--select a,b.c` | Keep only these fields. Dotted paths descend into arrays, and a field not at the top selects inside the one list a result holds, keeping the rest |
 | `--out <file>` | Write to a new file, readable only by you, never over an existing one |
 | `--wait` | For a job: wait until it finishes |
 | `--refresh` | Skip the local cache and fetch again |
@@ -431,7 +432,7 @@ Errors are JSON on stderr, always, with `error`, `code` and a `hint` that names 
 | `<mcp>` | MCP over stdio, what a client launches |
 | `<mcp> --http [--port 8787]` | Streamable HTTP at `/mcp`, with `/health`. The app's `httpPort` replaces 8787, for a server that shipped another default |
 
-HTTP binds `127.0.0.1` and checks the Host header, so a web page cannot reach it through a name that resolves to localhost. It refuses to listen on any other address without `<PREFIX>_HTTP_TOKEN`, because anyone who reached the port would act as your account.
+HTTP binds `127.0.0.1` and checks the Host header, so a web page cannot reach it through a name that resolves to localhost, and it refuses a request whose Origin is another site unless `<PREFIX>_HTTP_ALLOWED_ORIGINS` lists it, as the MCP transport spec asks. It refuses to listen on any other address without `<PREFIX>_HTTP_TOKEN`, because anyone who reached the port would act as your account.
 
 Work that belongs to a running server goes in `onServe(ctx, log)`, which runs once the server is answering over either transport and never for a CLI command: a queue that publishes on time, or a warning that a token expires this week. A throw there is logged and the server keeps serving.
 
@@ -560,6 +561,7 @@ Every server reads these, under its own prefix: the app name in capitals, `NOTES
 | `<PREFIX>_HTTP_PORT` | `8787`, or the app's `httpPort` | For `--http` |
 | `<PREFIX>_HTTP_HOST` | `127.0.0.1` | For `--http`. Any other address needs a token |
 | `<PREFIX>_HTTP_TOKEN` | none | Bearer token required by `--http` |
+| `<PREFIX>_HTTP_ALLOWED_ORIGINS` | none | Browser origins beyond localhost that may call `--http`, comma-separated |
 | `<PREFIX>_DEBUG` | `0` | `1` prints debug lines on stderr |
 
 ## Versions

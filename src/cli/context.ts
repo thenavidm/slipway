@@ -56,6 +56,7 @@ export function agentContext(app: App, env: NodeJS.ProcessEnv, bin: string, opti
         title: tool.title,
         ...(tool.risk !== "read" ? { risk: tool.risk } : {}),
         ...(tool.requireConfirm ? { requires_confirm: true } : {}),
+        ...(tool.spends ? { spends: true } : {}),
       })),
     };
   }
@@ -83,7 +84,7 @@ export function agentContext(app: App, env: NodeJS.ProcessEnv, bin: string, opti
         description: setting.description,
       })),
       { env: names.readOnly, value: policy.readOnly, description: "hide and refuse every write" },
-      { env: names.allowDestructive, value: policy.allowDestructive, description: "allow public or irreversible writes" },
+      { env: names.allowDestructive, value: policy.allowDestructive, description: app.allTools.some((tool) => tool.spends) ? "allow public or irreversible writes and paid calls" : "allow public or irreversible writes" },
       ...(app.allTools.some((tool) => tool.tags.length > 0)
         ? [{ env: names.toolsets, value: policy.toolsets === "all" ? "all" : [...policy.toolsets], description: "toolsets that are on" }]
         : []),
@@ -94,6 +95,7 @@ export function agentContext(app: App, env: NodeJS.ProcessEnv, bin: string, opti
       { env: `${app.envPrefix}_HTTP_PORT`, value: env[`${app.envPrefix}_HTTP_PORT`] ?? null, description: `port for --http, ${app.definition.httpPort ?? 8787} when unset` },
       { env: `${app.envPrefix}_HTTP_HOST`, value: env[`${app.envPrefix}_HTTP_HOST`] ?? null, description: "address for --http, 127.0.0.1 when unset; any other needs a token" },
       { env: `${app.envPrefix}_HTTP_TOKEN`, set: Boolean(env[`${app.envPrefix}_HTTP_TOKEN`]), secret: true, description: "bearer token --http requires" },
+      { env: `${app.envPrefix}_HTTP_ALLOWED_ORIGINS`, value: env[`${app.envPrefix}_HTTP_ALLOWED_ORIGINS`] ?? null, description: "browser origins beyond localhost that may call --http, comma-separated" },
       { env: `${app.envPrefix}_DEBUG`, value: /^(1|true|yes)$/i.test(env[`${app.envPrefix}_DEBUG`] ?? ""), description: "print debug lines on stderr" },
     ],
     ...(app.definition.toolsets ? { toolsets: app.definition.toolsets } : {}),
@@ -106,6 +108,7 @@ export function agentContext(app: App, env: NodeJS.ProcessEnv, bin: string, opti
       description: tool.description,
       risk: tool.risk,
       requires_confirm: tool.requireConfirm,
+      ...(tool.spends ? { spends: true } : {}),
       ...(tool.tags.length ? { toolsets: tool.tags } : {}),
       ...(tool.positional.length ? { positional: tool.positional } : {}),
       flags: flagsFor(tool.jsonSchema)

@@ -133,7 +133,7 @@ function callHash(tool: string, args: Record<string, unknown>): string {
  * form by itself (Codex accepts a form that has no fields), and one that fills
  * in defaults would otherwise approve with them.
  */
-export function approvalForm(appTitle: string, tool: Pick<Tool, "risk">, summary: string) {
+export function approvalForm(appTitle: string, tool: Pick<Tool, "risk" | "consequence" | "spends">, summary: string) {
   return {
     message: `${appTitle} wants to ${phrase(summary)}.\n\nThis ${consequence(tool)}.`,
     requestedSchema: {

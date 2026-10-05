@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { defineTool, slipway, z } from "../src/index.js";
-import { cli } from "../src/testing.js";
+import { checkApp, cli, connect } from "../src/testing.js";
 import { createApp, createStore } from "./fixtures/notes.js";
 
 const key = { NOTES_API_KEY: "sk-test-abcdef" };
@@ -22,7 +22,7 @@ describe("CLI: discovery", () => {
     expect(run.code).toBe(0);
     expect(run.stdout).toContain("Usage:\n  notes-cli get-note <id>");
     expect(run.stdout).toContain("notes-cli get-note 1");
-    expect(run.stdout).toContain("Risk: read only");
+    expect(run.stdout).toMatch(/^Risk: read$/m);
   });
 
   it("prints the exact schema an MCP client receives", async () => {
@@ -327,6 +327,7 @@ describe("CLI: terminal commands an app adds", () => {
     expect((await cli(described, ["--help"])).stdout).toMatch(/probe-cli login <instance> +register an app on that instance and sign in/);
     const help = await cli(described, ["login", "--help"]);
     expect(help.stdout).toContain("Usage: probe-cli login <instance>");
+    expect(help.stdout).toContain("Register an app on that instance and sign in.");
     expect(signedIn).toEqual([]);
     const context = JSON.parse((await cli(described, ["agent-context"])).stdout);
     expect(context.extra_commands).toEqual([{ command: "login", usage: "probe-cli login <instance>", description: "register an app on that instance and sign in" }]);
@@ -365,7 +366,7 @@ describe("CLI: help printed by the MCP binary", () => {
     expect(out).toMatch(/^ {2}notes-cli +list the commands$/m);
     expect(out).toContain("notes-mcp doctor");
     expect(await app.runCli(["no-such-command"], io)).toBe(2);
-    expect(err).toContain("Run `notes-cli` to list commands");
+    expect(err).toContain("Run `notes-cli` to list commands, or `notes-cli which <words>` to find one.");
   });
 });
 
@@ -475,5 +476,123 @@ describe("a tool's own consequence, and a switch that would do nothing", () => {
     const context = JSON.parse((await cli(app, ["agent-context"])).stdout);
     expect(context.settings.map((setting: { env: string }) => setting.env)).not.toContain("SHOP_TOOLSETS");
     expect((await cli(createApp(), ["--help"])).stdout).toContain("NOTES_TOOLSETS");
+  });
+});
+
+describe("a call that spends money", () => {
+  const app = slipway({
+    name: "studio",
+    version: "1.0.0",
+    context: () => ({}),
+    tools: [
+      defineTool({
+        name: "imagine",
+        title: "Generate an image",
+        description: "Generate four images from a prompt, which costs GPU time from the plan.",
+        input: z.object({ prompt: z.string() }),
+        risk: "write",
+        spends: true,
+        handler: () => ({ job: "j1" }),
+      }),
+      defineTool({ name: "list_jobs", title: "List jobs", description: "List recent generation jobs, newest first.", risk: "read", handler: () => [] }),
+    ],
+  });
+
+  it("needs --confirm, says it spends money, and is marked $ in the list", async () => {
+    const refused = await cli(app, ["imagine", "--prompt", "a lighthouse"]);
+    expect(refused.code).toBe(2);
+    expect(JSON.parse(refused.stderr).error).toMatch(/^imagine spends money and cannot be refunded, so it will not run without --confirm/);
+    expect((await cli(app, ["imagine", "--prompt", "a lighthouse", "--confirm"])).code).toBe(0);
+    const list = (await cli(app, [])).stdout;
+    expect(list).toMatch(/\$ imagine/);
+    expect(list).toContain("$ spends money, needs --confirm");
+  });
+
+  it("is refused with STUDIO_ALLOW_DESTRUCTIVE=0, even confirmed, yet clients see a plain write", async () => {
+    const off = await cli(app, ["imagine", "--prompt", "a lighthouse", "--confirm"], { env: { STUDIO_ALLOW_DESTRUCTIVE: "0" } });
+    expect(off.code).toBe(2);
+    expect(JSON.parse(off.stderr).hint).toContain("paid calls");
+    expect((await cli(app, ["--help"])).stdout).toContain("refuse the irreversible writes and paid calls");
+    const mcp = await connect(app);
+    const tool = (await mcp.listTools()).find((candidate) => candidate.name === "imagine")!;
+    await mcp.close();
+    expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    expect(tool._meta?.["anthropic/requiresUserInteraction"]).toBe(true);
+    const context = JSON.parse((await cli(app, ["agent-context", "--brief"])).stdout);
+    expect(context.commands.find((command: { command: string }) => command.command === "imagine")).toMatchObject({ requires_confirm: true, spends: true });
+  });
+
+  it("is refused on a read", () => {
+    expect(() => defineTool({ name: "peek", title: "Peek", description: "Look at one job by its id.", risk: "read", spends: true, handler: () => ({}) })).toThrow(/cannot spend/);
+  });
+});
+
+describe("login printed as steps", () => {
+  it("answers login --help with the steps, not the general help", async () => {
+    const app = slipway({ name: "keys", version: "1.0.0", context: () => ({}), tools: [], login: "Set KEYS_API_KEY to a key from the dashboard." });
+    const help = await cli(app, ["login", "--help"]);
+    expect(help.stdout.trim()).toBe("Set KEYS_API_KEY to a key from the dashboard.");
+  });
+});
+
+describe("an app's own vocabulary", () => {
+  const app = slipway({
+    name: "studio",
+    version: "1.0.0",
+    context: () => ({}),
+    flagAliases: { ar: "aspect", sref: "style_refs" },
+    synonyms: { picture: ["image"], make: ["generate", "imagine"], redo: ["rerun_job"] },
+    tools: [
+      defineTool({
+        name: "imagine",
+        title: "Generate images",
+        description: "Generate four images from a prompt and wait for them.",
+        input: z.object({ prompt: z.string(), aspect: z.string().optional().describe("Aspect ratio."), style_refs: z.array(z.string()).optional().describe("Style references.") }),
+        risk: "write",
+        handler: (args) => args,
+      }),
+      defineTool({ name: "vary_image", title: "Vary an image", description: "Make variations of one generated image.", input: z.object({ id: z.string() }), risk: "write", handler: () => ({}) }),
+      defineTool({ name: "rerun_job", title: "Run a job again", description: "Submit the same job again with the same settings.", input: z.object({ id: z.string() }), risk: "write", handler: () => ({}) }),
+      defineTool({ name: "list_jobs", title: "List jobs", description: "List recent jobs with their images.", risk: "read", handler: () => ({ count: 2, jobs: [{ id: "a", noise: 1 }, { id: "b", noise: 2 }], images: ["u1"] }) }),
+    ],
+  });
+
+  it("takes the ecosystem's flag spellings and shows them in help", async () => {
+    const run = await cli(app, ["imagine", "a lighthouse", "--ar", "16:9", "--sref", "123", "--json"]);
+    expect(JSON.parse(run.stdout)).toEqual({ prompt: "a lighthouse", aspect: "16:9", style_refs: ["123"] });
+    expect((await cli(app, ["imagine", "--help"])).stdout).toContain("--aspect, --ar");
+  });
+
+  it("finds a tool by the words people use, and nothing for a query of filler", async () => {
+    expect((await cli(app, ["which", "make", "a", "picture"])).stdout.split("\n")[0]).toContain("imagine");
+    expect((await cli(app, ["which", "redo", "that", "one"])).stdout.split("\n")[0]).toContain("rerun-job");
+    expect((await cli(app, ["which", "the", "of", "and"])).stdout).toContain("No command matches");
+  });
+
+  it("selects inside the one list a result holds, and keeps the rest", async () => {
+    const run = await cli(app, ["list-jobs", "--select", "id", "--compact"]);
+    expect(JSON.parse(run.stdout)).toEqual({ count: 2, jobs: [{ id: "a" }, { id: "b" }], images: ["u1"] });
+  });
+
+  it("fails check on an alias no input takes, and warns on a synonym no tool uses", async () => {
+    const broken = slipway({ ...app.definition, flagAliases: { q: "quality" }, synonyms: { art: ["painting"] } });
+    const report = await checkApp(broken, {});
+    expect(report.findings.some((finding) => finding.level === "error" && finding.message.includes("--q points at 'quality'"))).toBe(true);
+    expect(report.findings.some((finding) => finding.level === "warn" && finding.message.includes("'painting'"))).toBe(true);
+  });
+});
+
+describe("an app command that reads a flag Slipway also has", () => {
+  it("gets its own --out, where it declares it, and global flags are still taken out", async () => {
+    const seen: string[][] = [];
+    const app = slipway({
+      name: "rec",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [],
+      commands: [{ name: "capture", usage: "capture [--seconds N] [--out <file>]", help: "record what the app calls", flags: ["--out", "--seconds"], run: (_io, args) => (seen.push(args), 0) }],
+    });
+    expect((await cli(app, ["capture", "--seconds", "30", "--out", "calls.json", "--json"])).code).toBe(0);
+    expect(seen).toEqual([["--seconds", "30", "--out", "calls.json"]]);
   });
 });

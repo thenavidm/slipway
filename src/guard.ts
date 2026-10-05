@@ -64,10 +64,10 @@ export class Guard {
       });
     }
 
-    if (tool.risk === "destructive" && !this.policy.allowDestructive) {
+    if ((tool.risk === "destructive" || tool.spends) && !this.policy.allowDestructive) {
       this.record(tool, summary, "blocked: destructive disabled");
       throw new RefusedError(`${tool.name} is unavailable: this server is running with ${names.allowDestructive}=0.`, {
-        hint: `Unset ${names.allowDestructive} to allow irreversible writes.`,
+        hint: `Unset ${names.allowDestructive} to allow irreversible writes${tool.spends ? " and paid calls" : ""}.`,
       });
     }
   }
@@ -113,7 +113,8 @@ export class Guard {
 }
 
 /** Why a tool needs confirming, in the words a refusal and an approval form both use. */
-export function consequence(tool: Pick<Tool, "risk" | "consequence">): string {
+export function consequence(tool: Pick<Tool, "risk" | "consequence" | "spends">): string {
   if (tool.consequence) return tool.consequence;
+  if (tool.spends) return "spends money and cannot be refunded";
   return tool.risk === "destructive" ? "is public or cannot be undone" : "has an effect that cannot be taken back";
 }

@@ -69,7 +69,7 @@ export async function runData(app: App, io: CliIO, tokens: string[], options: Da
         const lists = app.allTools.filter((candidate) => candidate.sync).map((candidate) => candidate.command);
         throw new UsageError(`${tool.command} is not a list that can be synced.`, { hint: `Lists that can: ${lists.join(", ") || "none"}.` });
       }
-      const args = await app.parse(tool, parseToolArgs(flags, flagsFor(tool.jsonSchema), tool.positional));
+      const args = await app.parse(tool, parseToolArgs(flags, flagsFor(tool.jsonSchema), tool.positional, app.definition.flagAliases));
       const report = await syncTool(app, tool, args, {
         surface: "cli",
         env: io.env,

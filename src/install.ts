@@ -250,7 +250,7 @@ export function planInstall(app: App, options: InstallOptions, context: { env: N
 
   if (client === "claude-code") {
     const entry = { type: "stdio", command: launch.command, args: launch.args };
-    if (variables.length) notes.push(`Claude Code passes its own environment to the server: set ${list(variables)} in the shell you start Claude Code from.`);
+    if (variables.length) notes.push(`Claude Code passes its own environment to the server, so whichever of ${list(variables)} you use go in the shell you start Claude Code from.`);
     return { client, scope, name, entry, env, notes, run: { command: "claude", args: ["mcp", "add-json", name, JSON.stringify(entry), "--scope", scope] } };
   }
 
@@ -258,7 +258,7 @@ export function planInstall(app: App, options: InstallOptions, context: { env: N
     env.forwarded = variables;
     const before = existsSync(file!) ? readFileSync(file!, "utf8") : "";
     const text = upsertCodexServer(before, name, launch, variables, usesNpx);
-    if (variables.length) notes.push(`Codex passes ${list(variables)} on from its own environment: set ${them(variables)} where you start Codex.`);
+    if (variables.length) notes.push(`Codex passes ${list(variables)} on from its own environment, so whichever you use go where you start Codex.`);
     if (scope === "project") notes.push("Codex reads a project's .codex/config.toml only once the project is trusted.");
     const entry = upsertCodexServer("", name, launch, variables, usesNpx).trim();
     return { client, scope, name, file, entry, text, env, notes };
@@ -318,7 +318,7 @@ export function planInstall(app: App, options: InstallOptions, context: { env: N
   if (client === "claude-desktop") {
     if (env.copied.length) notes.push(`Copied ${list(env.copied)} from this shell into ${file}, which is now readable by you only.`);
     if (env.toAdd.length) {
-      notes.push(`Claude Desktop does not read a shell's environment. Add ${list(env.toAdd)} to the env of "${name}" in ${file}, or run install again with --copy-env to copy ${them(env.toAdd)} from this shell.`);
+      notes.push(`Claude Desktop does not read a shell's environment, so whichever of ${list(env.toAdd)} you use go in the env of "${name}" in ${file}, or run install again with --copy-env to copy them from this shell.`);
     }
   }
   return { client, scope, name, file, entry: server, text: `${JSON.stringify(next, null, 2)}\n`, env, notes };

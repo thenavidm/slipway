@@ -74,7 +74,7 @@ describe("install", () => {
     );
     expect(text).not.toContain("sk-notes-secret-1");
     expect(readdirSync(join(where.home, ".codex")).some((name) => name.startsWith("config.toml.bak-"))).toBe(true);
-    expect(run.stdout).toContain("Codex passes NOTES_API_KEY and NOTES_REGION on from its own environment: set them where you start Codex.");
+    expect(run.stdout).toContain("Codex passes NOTES_API_KEY and NOTES_REGION on from its own environment, so whichever you use go where you start Codex.");
   });
 
   it("updates a Codex table in place, keeping the person's own keys and subtables", () => {
@@ -139,7 +139,7 @@ describe("install", () => {
     if (process.platform !== "darwin" && process.platform !== "win32") return;
     const where = place();
     const plain = await install(["claude-desktop"], where);
-    expect(plain.stdout).toContain("Claude Desktop does not read a shell's environment. Add NOTES_API_KEY and NOTES_REGION");
+    expect(plain.stdout).toContain("Claude Desktop does not read a shell's environment, so whichever of NOTES_API_KEY and NOTES_REGION you use go in the env");
     const file = planInstall(createApp(), { client: "claude-desktop", scope: "user", name: "notes", copyEnv: false, local: false }, { env: where.env, cwd: where.project }).file!;
     expect(JSON.parse(readFileSync(file, "utf8")).mcpServers.notes.env).toBeUndefined();
 

@@ -103,6 +103,19 @@ export async function checkApp(app: App, options: CheckOptions = {}): Promise<Ch
       add("error", "names", `The terminal command '${command.name}' has the name of a built-in or a tool. Rename it.`);
     }
   }
+  for (const [alias, key] of Object.entries(app.definition.flagAliases ?? {})) {
+    const takes = app.allTools.some((tool) => Object.keys((tool.jsonSchema.properties as Record<string, unknown> | undefined) ?? {}).includes(key));
+    if (!takes) add("error", "names", `--${alias} points at '${key}', which no tool's input has.`);
+  }
+  // A synonym pointing at a word no tool uses is a redirect to nowhere that quietly stops matching.
+  const vocabulary = new Set(app.allTools.flatMap((tool) => `${tool.name} ${tool.title} ${tool.description}`.toLowerCase().split(/[^a-z0-9]+/)));
+  for (const [word, targets] of Object.entries(app.definition.synonyms ?? {})) {
+    for (const target of targets) {
+      if (!vocabulary.has(target.toLowerCase()) && !app.allTools.some((tool) => tool.name === target)) {
+        add("warn", "synonyms", `'${word}' points at '${target}', which no tool's name, title or description uses.`);
+      }
+    }
+  }
   const httpPort = app.definition.httpPort;
   if (httpPort !== undefined && (!Number.isInteger(httpPort) || httpPort < 1 || httpPort > 65535)) {
     add("error", "http", `httpPort is ${httpPort}, which is not a port number from 1 to 65535.`);

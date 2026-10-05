@@ -2,6 +2,20 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.8, 2026-10-05: what Midjourney and Substack needed
+
+- **HTTP checks Origin.** A request whose `Origin` is another site is refused unless `<PREFIX>_HTTP_ALLOWED_ORIGINS` lists it, as the MCP transport spec asks: a page in a browser can send a request to a localhost server, and only that header says where it came from. Clients that are not browsers send none and are unaffected. Substack's own server did this before it moved.
+- **`spends`: a call that costs money.** A paid generation needs confirming, `<PREFIX>_ALLOW_DESTRUCTIVE=0` refuses it, the CLI marks it `$`, and its refusal says it spends money that cannot be refunded, while clients still see a plain write, because making an image destroys nothing. Midjourney's ten generating tools are this.
+- **`flagAliases`: the spellings people already use.** `{ ar: "aspect" }` lets `--ar 16:9` set `aspect` on every command that has it, and help shows the alias beside the flag. `slipway check` fails an alias no input takes.
+- **`synonyms`, stopwords and exact names in search.** An app can map the words its users type onto the words its tools use, for `which` and the search surface; a query of filler words finds nothing instead of everything; and a term that is a tool's name, or a synonym pointing at it, wins outright. Midjourney's "make a picture" finds `imagine`, not `vary_image`.
+- **`--select` reaches into a result list.** When no path starts at the top and a result holds one list of records, the fields are selected inside it and the rest is kept: `--select id` on `{ count, jobs: [...] }` keeps the count and each job's id.
+- **An app command can own a flag Slipway also has.** `flags: ["--out"]` hands `--out` to the command instead of taking it as the global output flag. Midjourney's `capture --out` needs it.
+- **`login --help` prints the steps** for an app whose login is printed steps, not the general help.
+- **A command's own `--help` page reads as a sentence.** The line written for the command table, such as "capture a session for your publication once", starts with a capital and ends with a period on `login --help` and an app command's `--help`.
+- **Every command's `--help` is 10 tokens shorter.** `--select` and `--agent` say what they do in fewer words, and a read says `Risk: read`. Midjourney's `list-jobs --help` had grown 10 tokens on the move and is now the size 1.3.1's was.
+- **The unknown-command hint names one binary.** Typed at the MCP binary it said to list commands with `substack-cli` and find one with `substack-mcp which`; both now name the CLI binary.
+- **`install` says where settings go, not that they must be set.** Most settings are optional, and the notes no longer read as an order to set every one.
+
 ## 0.1.7, 2026-10-05: what Threads and ThriveCart needed, and what Substack and WordPress will
 
 - **`riskFor`: a write whose arguments decide its risk.** Publishing is destructive and saving a draft is a write, from the same tool. `risk` stays the highest a call can be, which is what clients see in annotations and listings; the guard, the approval and the audit log go by the call, and only a destructive call needs confirming. WordPress's post tools need it: 1.1 confirmed publishing and not drafting.

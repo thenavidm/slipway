@@ -10,11 +10,25 @@ import type { Tool } from "./tool.js";
 
 export type Match = { tool: Tool; score: number };
 
+/** Words a query carries that say nothing about which tool: "how do I get my images". */
+const STOP_WORDS = new Set([
+  "the", "my", "me", "to", "of", "for", "in", "on", "and", "or", "how", "do", "does", "can", "want",
+  "with", "from", "is", "are", "it", "that", "this", "what", "which", "any", "some", "please", "an",
+]);
+
 function words(text: string): string[] {
   return text
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((word) => word.length > 1)
+    .map(stem);
+}
+
+function queryWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length > 1 && !STOP_WORDS.has(word))
     .map(stem);
 }
 
@@ -51,11 +65,12 @@ const SYNONYMS: string[][] = [
 const RELATED = new Map<string, string[]>();
 for (const group of SYNONYMS) for (const word of group) RELATED.set(word, [...new Set([...(RELATED.get(word) ?? []), ...group])]);
 
-function hits(query: string, haystack: string[]): number {
+function hits(query: string, haystack: string[], extra?: ReadonlyMap<string, string[]>): number {
   const direct = exact(query, haystack);
   if (direct > 0) return direct;
   // A synonym counts for a little less than the word itself, so an exact match still wins.
-  return (RELATED.get(query) ?? []).some((word) => word !== query && exact(word, haystack) === 1) ? 0.75 : 0;
+  const related = [...(RELATED.get(query) ?? []), ...(extra?.get(query) ?? [])];
+  return related.some((word) => word !== query && exact(word, haystack) === 1) ? 0.75 : 0;
 }
 
 function exact(query: string, haystack: string[]): number {
@@ -63,10 +78,19 @@ function exact(query: string, haystack: string[]): number {
   return haystack.some((word) => word.startsWith(query) || query.startsWith(word)) ? 0.5 : 0;
 }
 
-export function searchTools(tools: readonly Tool[], query: string, limit = 10): Match[] {
-  const terms = [...new Set(words(query))];
+export function searchTools(tools: readonly Tool[], query: string, limit = 10, synonyms: Readonly<Record<string, readonly string[]>> = {}): Match[] {
+  const terms = [...new Set(queryWords(query))];
   if (terms.length === 0) return [];
   const phrase = query.trim().toLowerCase();
+  const extra = new Map<string, string[]>();
+  const pointsAt = new Map<string, string[]>();
+  for (const [word, targets] of Object.entries(synonyms)) {
+    extra.set(stem(word.toLowerCase()), targets.flatMap(words));
+    pointsAt.set(stem(word.toLowerCase()), targets.map((target) => target.toLowerCase()));
+  }
+  // A synonym can point straight at a tool's name, "redo" at `rerun_job`.
+  const named = (tool: Tool, term: string) =>
+    [term, ...(pointsAt.get(term) ?? [])].some((word) => word === tool.name || word === tool.name.replace(/_/g, ""));
 
   const scored = tools.map((tool) => {
     const name = words(tool.name);
@@ -76,7 +100,8 @@ export function searchTools(tools: readonly Tool[], query: string, limit = 10): 
     let score = 0;
     let matched = 0;
     for (const term of terms) {
-      const got = hits(term, name) * 5 + hits(term, title) * 4 + hits(term, tags) * 3 + hits(term, description);
+      // A term that is the tool's name is not a hint, it is the answer.
+      const got = (named(tool, term) ? 20 : 0) + hits(term, name, extra) * 5 + hits(term, title, extra) * 4 + hits(term, tags, extra) * 3 + hits(term, description, extra);
       if (got > 0) matched++;
       score += got;
     }

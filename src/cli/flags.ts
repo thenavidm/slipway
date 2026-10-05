@@ -144,13 +144,23 @@ function splits(flag: Flag): boolean {
  * positional arguments. The schema validates the result afterwards; this only
  * gets values into the right types and reports mistakes in terms of flags.
  */
-export function parseToolArgs(argv: readonly string[], flags: readonly Flag[], positional: readonly string[]): Record<string, unknown> {
+export function parseToolArgs(
+  argv: readonly string[],
+  flags: readonly Flag[],
+  positional: readonly string[],
+  aliases: Readonly<Record<string, string>> = {},
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const bare: string[] = [];
   const byName = new Map<string, Flag>();
   for (const flag of flags) {
     byName.set(flag.flag, flag);
     byName.set(`--${flag.key}`, flag);
+  }
+  // An alias never shadows a real flag of the same name.
+  for (const [alias, key] of Object.entries(aliases)) {
+    const flag = flags.find((candidate) => candidate.key === key);
+    if (flag && !byName.has(`--${alias}`)) byName.set(`--${alias}`, flag);
   }
 
   const assign = (flag: Flag, value: unknown) => {

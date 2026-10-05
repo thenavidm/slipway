@@ -128,6 +128,6 @@ export function visibility(tool: Pick<Tool, "risk" | "tags">, policy: Policy): V
   return { visible: true };
 }
 
-export function riskMark(risk: Risk): string {
-  return risk === "read" ? " " : risk === "destructive" ? "!" : "*";
+export function riskMark(tool: { risk: Risk; spends?: boolean }): string {
+  return tool.spends ? "$" : tool.risk === "read" ? " " : tool.risk === "destructive" ? "!" : "*";
 }

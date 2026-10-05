@@ -133,6 +133,13 @@ export type ToolDefinition<Ctx, I extends Schema, O extends Schema | undefined> 
    */
   riskFor?: (args: InferOutput<I>) => Risk;
   /**
+   * The call spends money or credits: a paid generation, a billed send. It
+   * needs confirming, `<PREFIX>_ALLOW_DESTRUCTIVE=0` refuses it, and the CLI
+   * marks it `$`, while clients still see a plain write, because making an
+   * image destroys nothing.
+   */
+  spends?: boolean;
+  /**
    * What a confirmed call does that cannot be taken back, as the refusal and
    * the approval form put it: "moves money and cannot be undone". Defaults to
    * "is public or cannot be undone" for a destructive tool.
@@ -182,6 +189,8 @@ export type Tool<Ctx = any> = {
   readonly idempotent: boolean;
   readonly openWorld: boolean;
   readonly requireConfirm: boolean;
+  /** The call spends money or credits. */
+  readonly spends: boolean;
   /** The risk of one call, from its arguments. `forCall` applies it. */
   readonly riskFor?: (args: any) => Risk;
   /** What a confirmed call does that cannot be taken back, in the tool's own words. */
@@ -239,6 +248,7 @@ export function defineTool<Ctx = unknown, I extends Schema = Schema<Record<strin
     if (!TAG.test(tag)) throw new Error(`${where}: tag '${tag}' must be lowercase words joined by dashes.`);
   }
   if (typeof definition.handler !== "function") throw new Error(`${where}: handler is required.`);
+  if (definition.spends && definition.risk === "read") throw new Error(`${where}: a read cannot spend; make it a write.`);
   if (definition.riskFor !== undefined) {
     if (typeof definition.riskFor !== "function") throw new Error(`${where}: riskFor must be a function of the arguments.`);
     if (definition.risk === "read") throw new Error(`${where}: riskFor is for a write whose arguments decide how far it reaches; a read has nothing to decide.`);
@@ -275,7 +285,7 @@ export function defineTool<Ctx = unknown, I extends Schema = Schema<Record<strin
   for (const name of CONTROL_NAMES) {
     if (own.includes(name)) throw new Error(`${where}: '${name}' is Slipway's own argument. Rename the input property.`);
   }
-  const requireConfirm = definition.requireConfirm ?? definition.risk === "destructive";
+  const requireConfirm = definition.requireConfirm ?? (definition.risk === "destructive" || definition.spends === true);
   const schema = withControls(input, {
     confirm: requireConfirm,
     ...(job ? { wait: { defaultSeconds: waitSecondsFor(job), maxSeconds: MAX_WAIT_SECONDS } } : {}),
@@ -300,6 +310,7 @@ export function defineTool<Ctx = unknown, I extends Schema = Schema<Record<strin
     idempotent: definition.idempotent ?? definition.risk === "read",
     openWorld: definition.openWorld ?? true,
     requireConfirm,
+    spends: definition.spends === true,
     ...(definition.riskFor ? { riskFor: definition.riskFor as (args: any) => Risk } : {}),
     ...(definition.consequence?.trim() ? { consequence: definition.consequence.trim().replace(/\.$/, "") } : {}),
     tags: Object.freeze([...(definition.tags ?? [])]),
@@ -375,5 +386,5 @@ export function forCall<Ctx>(tool: Tool<Ctx>, args: Record<string, unknown>): To
     // The declared risk is the safe answer.
   }
   if (risk === tool.risk) return tool;
-  return { ...tool, risk, requireConfirm: tool.requireConfirm && risk === "destructive" };
+  return { ...tool, risk, requireConfirm: tool.requireConfirm && (risk === "destructive" || tool.spends) };
 }

@@ -23,8 +23,8 @@ export const GLOBAL_FLAGS: Array<[string, string]> = [
   ["--jsonl", "one JSON value per line, for lists"],
   ["--csv / --tsv", "a table, for lists of records"],
   ["--quiet", "one value per line: ids, or the one --select field"],
-  ["--select <a,b.c>", "keep only these fields; dotted paths descend"],
-  ["--agent", "JSON, compact, no prompts, no color. Never confirms anything"],
+  ["--select <a,b.c>", "keep only these fields"],
+  ["--agent", "compact JSON, no prompts, never confirms"],
   ["--out <file>", "write the output to a new file instead of stdout"],
   ["--input <json|@file|->", "all arguments as one JSON object; flags override it"],
   ["--dry-run", "check everything and print what would run, without running it"],
@@ -39,7 +39,8 @@ function line(left: string, help: string): string[] {
 }
 
 function riskWords(tool: Tool): string {
-  return tool.risk === "read" ? "read only" : tool.risk === "write" ? "writes, reversible" : "public or irreversible";
+  if (tool.spends) return "spends money, needs --confirm";
+  return tool.risk === "read" ? "read" : tool.risk === "write" ? "writes, reversible" : "public or irreversible";
 }
 
 /** The output flags a command can use: the four every command takes, and those its kind adds. */
@@ -92,13 +93,14 @@ export function renderList(app: App, tools: readonly Tool[], bin: string, env: N
   if (!grouped) lines.push(``);
   for (const [group, members] of ordered) {
     if (grouped) lines.push(``, `  ${group || "general"}${group && toolsets[group] ? `: ${toolsets[group]}` : ""}`);
-    for (const tool of members) lines.push(`  ${riskMark(tool.risk)} ${tool.command.padEnd(width)}${tool.title}`);
+    for (const tool of members) lines.push(`  ${riskMark(tool)} ${tool.command.padEnd(width)}${tool.title}`);
   }
   // The legend says `!` needs --confirm only when that holds for every listed command.
-  const confirmByRisk = tools.every((tool) => tool.requireConfirm === (tool.risk === "destructive"));
+  const confirmByRisk = tools.every((tool) => tool.requireConfirm === (tool.risk === "destructive" || tool.spends));
+  const paid = tools.some((tool) => tool.spends) ? "    $ spends money, needs --confirm" : "";
   lines.push(
     ``,
-    `  * writes    ! public or irreversible${confirmByRisk ? ", needs --confirm" : ""}`,
+    `  * writes    ! public or irreversible${confirmByRisk ? ", needs --confirm" : ""}${paid}`,
     ``,
     `  ${bin} <command> --help    what one takes, with examples`,
     `  ${bin} which <words>       find the command for a task`,
@@ -140,7 +142,8 @@ function placeholder(flag: Flag): string {
   return ` <${flag.kind === "json" ? "json|@file" : flag.kind}>`;
 }
 
-export function renderToolHelp(tool: Tool, bin: string): string {
+export function renderToolHelp(tool: Tool, bin: string, aliases: Readonly<Record<string, string>> = {}): string {
+  const aliasOf = (key: string) => Object.entries(aliases).filter(([, target]) => target === key).map(([alias]) => `, --${alias}`).join("");
   const flags = flagsFor(tool.jsonSchema).filter((flag) => flag.key !== "confirm");
   const required = flags.filter((flag) => flag.required);
   const optional = flags.filter((flag) => !flag.required);
@@ -164,7 +167,7 @@ export function renderToolHelp(tool: Tool, bin: string): string {
       const extra = [flag.repeatable ? "Repeatable." : "", flag.default !== undefined ? `Default ${JSON.stringify(flag.default)}.` : ""]
         .filter(Boolean)
         .join(" ");
-      lines.push(...line(`  ${flag.flag}${placeholder(flag)}`, [flag.help, extra].filter(Boolean).join(" ")));
+      lines.push(...line(`  ${flag.flag}${aliasOf(flag.key)}${placeholder(flag)}`, [flag.help, extra].filter(Boolean).join(" ")));
     }
     lines.push(...after, ``);
   };
@@ -226,7 +229,7 @@ export function renderGeneralHelp(app: App, bin: string): string {
   const settings: Array<[string, string]> = [
     ...(app.definition.settings ?? []).filter((setting) => !setting.tuning).map((setting): [string, string] => [setting.env, setting.description]),
     [`${names.readOnly}=1`, "hide and refuse every write"],
-    [`${names.allowDestructive}=0`, "refuse the irreversible writes"],
+    [`${names.allowDestructive}=0`, app.allTools.some((tool) => tool.spends) ? "refuse the irreversible writes and paid calls" : "refuse the irreversible writes"],
     // With no tagged tool every tool is always on, so the switch would do nothing.
     ...(app.allTools.some((tool) => tool.tags.length > 0) ? ([[`${names.toolsets}=a,b`, "only these toolsets, or all"]] as Array<[string, string]>) : []),
     [`${names.surface}=search`, "MCP lists three finder tools instead"],
@@ -235,7 +238,7 @@ export function renderGeneralHelp(app: App, bin: string): string {
     [`${names.confirm}=model`, "confirm: true alone confirms over MCP"],
     ...(cache ? ([[`${names.cache}=0`, "never answer from the local cache"]] as Array<[string, string]>) : []),
     ...(cache || sync ? ([[`${names.dataDir}=<dir>`, "keep local data in this folder"]] as Array<[string, string]>) : []),
-    [`${app.envPrefix}_HTTP_PORT / _HOST / _TOKEN`, "for --http"],
+    [`${app.envPrefix}_HTTP_PORT / _HOST / _TOKEN / _ALLOWED_ORIGINS`, "for --http"],
     [`${app.envPrefix}_DEBUG=1`, "debug lines on stderr"],
   ];
   // Flags that cannot apply here (jobs, the cache) are left out; agent-context lists every one.
@@ -266,5 +269,5 @@ export function renderGeneralHelp(app: App, bin: string): string {
 
 /** One line per tool, for search results and listings. */
 export function toolLine(tool: Tool): string {
-  return `${riskMark(tool.risk)} ${tool.command}  ${tool.title}: ${firstSentence(tool.description, 80)}`;
+  return `${riskMark(tool)} ${tool.command}  ${tool.title}: ${firstSentence(tool.description, 80)}`;
 }

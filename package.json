@@ -1,6 +1,6 @@
 {
   "name": "@thenavidm/slipway",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Slipway, the TypeScript framework for MCP servers and agent-native CLIs. One tool definition ships an MCP server and a CLI, with write safety, typed results and release checks built in.",
   "type": "module",
   "license": "Apache-2.0",

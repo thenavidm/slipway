@@ -21,7 +21,8 @@ export async function runDoctor(app: App, io: CliIO, options: { network: boolean
   checks.push({ name: "Node.js", ok: major >= 22, detail: `v${process.versions.node}`, ...(major >= 22 ? {} : { fix: "Install Node.js 22 or later." }) });
   checks.push({ name: "Version", ok: true, detail: `${app.name} ${app.version}` });
 
-  const writes = policy.readOnly ? "off (read-only)" : policy.allowDestructive ? "on" : "on, irreversible ones refused";
+  const paid = app.allTools.some((tool) => tool.spends) ? " and paid" : "";
+  const writes = policy.readOnly ? "off (read-only)" : policy.allowDestructive ? "on" : `on, irreversible${paid} ones refused`;
   checks.push({ name: "Writes", ok: true, detail: writes });
   checks.push({
     name: "Tools",
