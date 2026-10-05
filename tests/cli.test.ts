@@ -94,6 +94,31 @@ describe("CLI: discovery", () => {
     expect(write).toContain("--agent never adds it");
   });
 
+  it("never lists --confirm as the only required flag, which reads as if nothing else were needed", async () => {
+    // Wistia's import takes its URL as a flag or inside --payload, so no flag is required; a Required
+    // section holding only --confirm sent Codex to read the schema as well, one more step.
+    const app = slipway({
+      name: "probe",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [
+        defineTool({ name: "import_media", title: "Import media", description: "Import a media file from a URL.", input: z.object({ url: z.string().optional().describe("The URL to import."), payload: z.string().optional().describe("The whole body instead.") }), risk: "destructive", summary: () => "import", handler: () => ({}) }),
+        defineTool({ name: "delete_media", title: "Delete media", description: "Delete one media file.", input: z.object({ id: z.string().describe("The media id.") }), risk: "destructive", summary: () => "delete", handler: () => ({}) }),
+      ],
+    });
+    const open = (await cli(app, ["import-media", "--help"])).stdout;
+    expect(open).not.toContain("Required:");
+    expect(open.slice(open.indexOf("Options:"))).toContain("--confirm");
+    const pinned = (await cli(app, ["delete-media", "--help"])).stdout;
+    expect(pinned.slice(pinned.indexOf("Required:"), pinned.indexOf("Options:"))).toContain("--confirm");
+  });
+
+  it("leaves the flags to each command's help, since an agent carries the general help through every step", async () => {
+    const help = (await cli(createApp(), ["--help"])).stdout;
+    expect(help).not.toContain("Flags:");
+    expect(help).toContain("what one takes, and its flags");
+  });
+
   it("says why commands are hidden and which setting lists them", async () => {
     const off = (await cli(createApp(), [], { env: { NOTES_TOOLSETS: "none" } })).stdout;
     expect(off).toContain("1 more command is in admin, off: NOTES_TOOLSETS=admin turns it on.");

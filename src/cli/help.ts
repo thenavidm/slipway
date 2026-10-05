@@ -176,8 +176,16 @@ export function renderToolHelp(tool: Tool, bin: string, aliases: Readonly<Record
     }
     lines.push(...after, ``);
   };
-  describe(required, "Required", tool.requireConfirm ? line("  --confirm", "it runs only with this; --agent never adds it") : []);
-  describe(optional, "Options");
+  const confirm = tool.requireConfirm ? line("  --confirm", "it runs only with this; --agent never adds it") : [];
+  // A Required section holding only --confirm reads as if nothing else were needed, when a write's body
+  // often comes as flags or as one --payload: Codex then read Wistia's schema to check, one more step.
+  // Alone, --confirm closes the options instead, and the usage line still ends with it.
+  if (required.length) {
+    describe(required, "Required", confirm);
+    describe(optional, "Options");
+  } else {
+    describe(optional, "Options", confirm);
+  }
 
   if (tool.paginate) {
     lines.push(`Pages:`, ...line("  --all", "follow every page and print all items"), ...line("  --max-items <n>", "stop after this many items"), ``);
@@ -217,13 +225,12 @@ export function renderGeneralHelp(app: App, bin: string): string {
   const applies = switchesThatApply(app.allTools);
   const cache = app.allTools.some((tool) => tool.cache);
   const sync = app.allTools.some((tool) => tool.sync);
-  const jobs = app.allTools.some((tool) => tool.job);
   // An agent often reads this first and pays for it again on every later step, so the
   // rarely needed commands share one line, an older name for a command is left out, and
   // Slipway's settings past the two safety switches are named on one line.
   const commands: Array<[string, string]> = [
     [app.bins.cli, "list the commands"],
-    [`${bin} <command> --help`, "what one takes"],
+    [`${bin} <command> --help`, "what one takes, and its flags"],
     [`${bin} which <words>`, "find the command for a task"],
     [`${bin} doctor${app.definition.doctorNetwork ? "" : " [--network]"}`, "check the setup"],
     typeof app.definition.login === "object"
@@ -270,19 +277,6 @@ export function renderGeneralHelp(app: App, bin: string): string {
     ...(app.allTools.some((tool) => tool.tags.length > 0) ? ([[`${names.toolsets}=a,b`, "only these toolsets, or all"]] as Array<[string, string]>) : []),
   ];
   const more = tuning.length + 4;
-  // The list formats appear in the help of the commands that list; flags that cannot apply
-  // here (jobs, the cache) are left out. agent-context lists every one.
-  const flags = GLOBAL_FLAGS.map(([flag]) => flag).filter(
-    (flag) =>
-      flag !== "--agent" &&
-      flag !== "--jsonl" &&
-      flag !== "--csv / --tsv" &&
-      flag !== "--quiet" &&
-      flag !== "--out <file>" &&
-      flag !== "--timeout <ms>" &&
-      (flag !== "--wait" || jobs) &&
-      (flag !== "--refresh" || cache),
-  );
   const commandRow = table(commands);
   const settingRow = table(settings);
   const lines = [
@@ -292,8 +286,8 @@ export function renderGeneralHelp(app: App, bin: string): string {
     ...commands.map(commandRow),
     `  Also: schema <command>, agent-context (all of this as JSON), completion <shell>.`,
     ``,
-    `Flags: ${flags.join(", ")}, and --agent: compact JSON, no prompts, never confirms a write.`,
-    ``,
+    // No flags line: each command's own --help shows the flags it can use, --agent among them,
+    // and an agent reading this first carried those 44 tokens through every later step.
     `Settings:`,
     ...settings.map(settingRow),
     `  And ${more} more, for tuning and --http: agent-context describes each.`,

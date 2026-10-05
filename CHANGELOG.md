@@ -2,6 +2,11 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.18, 2026-10-05: what Wistia and Testimonial.to needed
+
+- **A command's help never lists `--confirm` as the only required flag.** Wistia's import takes its URL as a flag or inside `--payload`, so no flag is required, and its help showed a Required section holding only `--confirm`. That reads as if nothing else were needed: every Codex run then read the command's schema as well, and finding the command and its flags cost a median of 105,140 input tokens, where Wistia's own 2.x CLI cost 86,365. Alone, `--confirm` now closes the options, where 2.x listed it, and the usage line still ends with it; two runs then took 83,069 and 82,817.
+- **The general help leaves the flags to each command.** Each command's `--help` lists the flags it can use, `--agent` among them, so the general help's line of them repeated what an agent reads one step later, after carrying that line through every step in between. Without it the general help is 35 tokens shorter on every server: Testimonial.to's goes from 324 to 289.
+
 ## 0.1.17, 2026-10-05: what Google Photos needed
 
 - **`which` reads an argument by its own words, not through a synonym.** Since 0.1.14 a tool's argument names count toward finding it, and a synonym reached them too. Google Photos says "photos" means media, so `get_media_item`, which takes a `media_item_id`, drew level with the photo picker for "let me choose photos" and was listed first. An argument now counts only for the words it is made of, so the picker is first again. Buffer's "schedule a post to a channel" still reads `channelId` and `schedulingType`, and the first answer to every task measured on the other servers is unchanged.
