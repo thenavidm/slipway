@@ -22,7 +22,7 @@ import * as z from "zod";
 import { cacheKey, dataDir, scopeOf, storeAt, type DataStore } from "./data.js";
 import { Guard, type ConfirmedBy } from "./guard.js";
 import { isBackground, JobRegistry, runJob, waitSecondsFor, type JobProgress, type JobResult } from "./jobs.js";
-import { policyEnvNames, readPolicy, visibility, type Policy, type PolicyDefaults } from "./policy.js";
+import { policyEnvNames, readPolicy, switchWords, visibility, type Policy, type PolicyDefaults } from "./policy.js";
 import { Secrets } from "./redact.js";
 import { isContentResult } from "./result.js";
 import { formatIssues, validate, type Schema } from "./schema.js";
@@ -121,6 +121,16 @@ export type CliCommand = {
   run: (io: CliIO, args: string[]) => number | Promise<number>;
 };
 
+/** The running server as `onServe` sees it. */
+export type ServeSession = {
+  /**
+   * Send the client a notification outside any request, such as Claude Code's
+   * `notifications/claude/channel`. Resolves true once it is written to stdio,
+   * and false over HTTP, where no session is waiting for one.
+   */
+  notify(method: string, params?: Record<string, unknown>): Promise<boolean>;
+};
+
 export type AppDefinition<Ctx> = {
   /** The service slug: "bluesky". Binaries default to bluesky-mcp and bluesky-cli. */
   name: string;
@@ -168,9 +178,17 @@ export type AppDefinition<Ctx> = {
    * Runs once the server is answering, over stdio or HTTP, and never for a CLI
    * command. For work that belongs to a running server, such as a queue that
    * publishes on time, or a warning such as a token about to expire. It gets
-   * the context and the server's stderr logger; a throw is logged, never fatal.
+   * the context, the server's stderr logger and the session, whose `notify`
+   * sends the client events, such as a channel's messages; a throw is logged,
+   * never fatal.
    */
-  onServe?: (ctx: Ctx, log: Logger) => void | Promise<void>;
+  onServe?: (ctx: Ctx, log: Logger, session: ServeSession) => void | Promise<void>;
+  /**
+   * Capabilities outside the protocol, declared under `experimental`. Claude
+   * Code's `claude/channel` makes the server a channel: its `onServe` pushes
+   * `notifications/claude/channel` events into the session with `notify`.
+   */
+  experimental?: Record<string, Record<string, unknown>>;
   /**
    * How to sign in: printed instructions, or an interactive flow that returns an
    * exit code. A flow gets the words after `login`: `mastodon-cli login mastodon.social`.
@@ -613,15 +631,12 @@ function assertVisible(tool: Tool, policy: Policy, envPrefix: string): void {
   const seen = visibility(tool, policy);
   if (seen.visible) return;
   const names = policyEnvNames(envPrefix);
+  const words = switchWords(policy, names);
   if (seen.reason === "read-only") {
-    throw new RefusedError(`${tool.name} is unavailable: this server is running with ${names.readOnly}=1.`, {
-      hint: `Unset ${names.readOnly} to allow writes.`,
-    });
+    throw new RefusedError(`${tool.name} is unavailable: ${words.readOnly}.`, { hint: words.readOnlyFix });
   }
   if (seen.reason === "destructive") {
-    throw new RefusedError(`${tool.name} is unavailable: this server is running with ${names.allowDestructive}=0.`, {
-      hint: `Unset ${names.allowDestructive} to allow irreversible writes.`,
-    });
+    throw new RefusedError(`${tool.name} is unavailable: ${words.destructive}.`, { hint: words.destructiveFix("irreversible writes") });
   }
   throw new UsageError(`${tool.name} is in a toolset that is off: ${tool.tags.join(", ")}.`, {
     hint: `Add one of them to ${names.toolsets}, or set ${names.toolsets}=all.`,

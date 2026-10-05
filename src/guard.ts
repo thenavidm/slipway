@@ -13,7 +13,7 @@
 
 import { appendFileSync } from "node:fs";
 import { RefusedError } from "./errors.js";
-import { policyEnvNames, type Policy } from "./policy.js";
+import { policyEnvNames, switchWords, type Policy } from "./policy.js";
 import type { Surface, Tool } from "./tool.js";
 
 /**
@@ -57,20 +57,23 @@ export class Guard {
     if (tool.risk === "read" && !tool.requireConfirm) return;
     const names = policyEnvNames(this.prefix);
 
+    const words = switchWords(this.policy, names);
     if (this.policy.readOnly && tool.risk !== "read") {
       this.record(tool, summary, "blocked: read-only");
       // A tool kept for its reads is listed, so the refusal says why this call is not one.
       const message =
         tool.whenReadOnly === "reads"
-          ? `${tool.name} only reads while this server is running with ${names.readOnly}=1, and this call writes. About to: ${sentenceBody(summary)}.`
-          : `${tool.name} is unavailable: this server is running with ${names.readOnly}=1.`;
-      throw new RefusedError(message, { hint: `Unset ${names.readOnly} to allow writes.` });
+          ? this.policy.readOnlyByDefault
+            ? `${tool.name} only reads while ${words.readOnly}, and this call writes. About to: ${sentenceBody(summary)}.`
+            : `${tool.name} only reads while this server is running with ${names.readOnly}=1, and this call writes. About to: ${sentenceBody(summary)}.`
+          : `${tool.name} is unavailable: ${words.readOnly}.`;
+      throw new RefusedError(message, { hint: words.readOnlyFix });
     }
 
     if ((tool.risk === "destructive" || tool.spends) && !this.policy.allowDestructive) {
       this.record(tool, summary, "blocked: destructive disabled");
-      throw new RefusedError(`${tool.name} is unavailable: this server is running with ${names.allowDestructive}=0.`, {
-        hint: `Unset ${names.allowDestructive} to allow irreversible writes${tool.spends ? " and paid calls" : ""}.`,
+      throw new RefusedError(`${tool.name} is unavailable: ${words.destructive}.`, {
+        hint: words.destructiveFix(`irreversible writes${tool.spends ? " and paid calls" : ""}`),
       });
     }
   }

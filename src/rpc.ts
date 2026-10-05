@@ -10,9 +10,10 @@
  * input before it finishes.
  */
 
-import { InMemoryTransport, type CallToolResult } from "@modelcontextprotocol/server";
+import { InMemoryTransport, type CallToolResult, type McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
-import type { App } from "./app.js";
+import { stderrLogger, type App } from "./app.js";
+import { afterStart, sessionOf } from "./serve.js";
 
 export type ListedTool = {
   name: string;
@@ -46,6 +47,8 @@ export type ConnectOptions = {
    * Setting it declares that the client can ask a person.
    */
   elicit?: (request: ElicitRequest) => ElicitAnswer | Promise<ElicitAnswer>;
+  /** Run the app's `onServe` once connected, as a real stdio server does, so its notifications arrive here. */
+  serve?: boolean;
 };
 
 export type RpcClient = {
@@ -57,6 +60,8 @@ export type RpcClient = {
   send(method: string, params?: Record<string, unknown>): Promise<unknown>;
   listTools(): Promise<ListedTool[]>;
   callTool(name: string, args?: Record<string, unknown>): Promise<CallToolResult>;
+  /** Every notification the server sent this client, in order. */
+  notifications: Array<{ method: string; params?: Record<string, unknown> }>;
   close(): Promise<void>;
 };
 
@@ -78,7 +83,9 @@ export async function connectInMemory(app: App, env: NodeJS.ProcessEnv = process
   const clientInfo = options.clientInfo ?? { name: "slipway-check", version: "0" };
   const capabilities: Record<string, unknown> = options.elicit ? { elicitation: { form: {} } } : {};
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-  const handle = serveStdio(() => app.createServer(env), { transport: serverSide });
+  let server: McpServer | undefined;
+  const handle = serveStdio(() => (server = app.createServer(env)), { transport: serverSide });
+  const notifications: RpcClient["notifications"] = [];
 
   let nextId = 0;
   const pending = new Map<number | string, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
@@ -94,8 +101,11 @@ export async function connectInMemory(app: App, env: NodeJS.ProcessEnv = process
   clientSide.onmessage = (raw) => {
     const message = raw as Message;
     if (message.method !== undefined) {
+      if (message.id === undefined) {
+        notifications.push({ method: message.method, ...(message.params ? { params: message.params } : {}) });
+        return;
+      }
       // A request from the server, which only the 2025 handshake sends this way.
-      if (message.id === undefined) return;
       const id = message.id;
       void answer(message.method, message.params).then(
         (result) => clientSide.send({ jsonrpc: "2.0", id, result: result as Record<string, unknown> }),
@@ -150,11 +160,14 @@ export async function connectInMemory(app: App, env: NodeJS.ProcessEnv = process
     await clientSide.send({ jsonrpc: "2.0", method: "notifications/initialized" });
   }
 
+  if (options.serve) void afterStart(app, env, stderrLogger(app.envPrefix, env), sessionOf(() => server));
+
   return {
     era,
     initialize,
     request,
     send,
+    notifications,
     async listTools() {
       const tools: ListedTool[] = [];
       let cursor: string | undefined;

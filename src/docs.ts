@@ -54,13 +54,22 @@ export function toolReference(app: App, tools: readonly Tool[], heading = "###")
 export function settingsTable(app: App): string {
   const names = policyEnvNames(app.envPrefix);
   const applies = switchesThatApply(app.allTools);
+  // What the server does with nothing set, which is what a reader starts from.
+  const defaults = app.policy({});
   return [
     "| Variable | What it does |",
     "|---|---|",
     ...(app.definition.settings ?? []).map((setting) => `| \`${setting.env}\` | ${cell(setting.description)}${setting.secret ? " Keep it private." : ""} |`),
-    ...(applies.readOnly ? [`| \`${names.readOnly}=1\` | Hide and refuse every write |`] : []),
+    // A server that is off by default names the setting that turns writes on.
+    ...(applies.readOnly
+      ? [defaults.readOnlyByDefault ? `| \`${names.readOnly}=0\` | Turn writes on, which are off by default |` : `| \`${names.readOnly}=1\` | Hide and refuse every write |`]
+      : []),
     ...(applies.allowDestructive
-      ? [`| \`${names.allowDestructive}=0\` | Keep writes, refuse the public or irreversible ones${app.allTools.some((tool) => tool.spends) ? " and paid calls" : ""} |`]
+      ? [
+          defaults.destructiveOffByDefault
+            ? `| \`${names.allowDestructive}=1\` | Turn the public or irreversible writes${app.allTools.some((tool) => tool.spends) ? " and paid calls" : ""} on, which are off by default |`
+            : `| \`${names.allowDestructive}=0\` | Keep writes, refuse the public or irreversible ones${app.allTools.some((tool) => tool.spends) ? " and paid calls" : ""} |`,
+        ]
       : []),
     `| \`${names.toolsets}\` | Comma-separated toolsets to turn on, or \`all\` |`,
     `| \`${names.surface}=search\` | List three tools that find, describe and run the rest |`,

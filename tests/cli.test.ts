@@ -839,3 +839,104 @@ describe("an app command that reads a flag Slipway also has", () => {
     expect(seen).toEqual([["--seconds", "30", "--out", "calls.json"]]);
   });
 });
+
+describe("a server that is read-only until a setting turns writes on", () => {
+  const app = slipway({
+    name: "page",
+    title: "Page",
+    version: "1.0.0",
+    context: () => ({}),
+    defaults: {
+      // The older switches still decide, as a server that moved keeps them.
+      readOnly: (env) => env.PAGE_ALLOW_WRITE !== "true",
+      allowDestructive: (env) => env.PAGE_ALLOW_DELETE === "true",
+    },
+    tools: [
+      defineTool({ name: "list_posts", title: "List posts", description: "List the posts.", risk: "read", handler: () => ({ posts: [] }) }),
+      defineTool({ name: "create_post", title: "Post", description: "Publish a post.", input: z.object({ text: z.string() }), risk: "write", handler: () => ({ posted: true }) }),
+      defineTool({ name: "delete_post", title: "Delete a post", description: "Delete a post.", input: z.object({ id: z.string() }), risk: "destructive", handler: () => ({ deleted: true }) }),
+    ],
+  });
+
+  it("hides writes with nothing set, and names the setting that turns them on", async () => {
+    const list = (await cli(app, [], { env: {} })).stdout;
+    expect(list).not.toMatch(/create-post/);
+    expect(list).toMatch(/2 writes are hidden until PAGE_READ_ONLY=0 is set\./);
+    const refused = await cli(app, ["create-post", "--text", "x", "--agent"], { env: {} });
+    expect(refused.code).toBe(2);
+    expect(JSON.parse(refused.stderr)).toMatchObject({
+      error: "create-post is unavailable: every write is hidden until PAGE_READ_ONLY=0 is set.",
+      hint: "Set PAGE_READ_ONLY=0 to allow writes.",
+    });
+    expect((await cli(app, ["--help"], { env: {} })).stdout).toMatch(/PAGE_READ_ONLY=0\s+turn writes on/);
+    expect((await cli(app, ["doctor", "--agent"], { env: {} })).stdout).toMatch(/read-only until PAGE_READ_ONLY=0 is set/);
+  });
+
+  it("turns writes on with the older switch or its own, and keeps deletes off until the second switch", async () => {
+    for (const env of [{ PAGE_ALLOW_WRITE: "true" }, { PAGE_READ_ONLY: "0" }]) {
+      expect((await cli(app, ["create-post", "--text", "x", "--agent"], { env })).code).toBe(0);
+    }
+    const env = { PAGE_ALLOW_WRITE: "true" };
+    const refused = await cli(app, ["delete-post", "--id", "1", "--confirm", "--agent"], { env });
+    expect(refused.code).toBe(2);
+    expect(JSON.parse(refused.stderr)).toMatchObject({
+      error: "delete_post is unavailable: irreversible writes are off until PAGE_ALLOW_DESTRUCTIVE=1 is set.",
+      hint: "Set PAGE_ALLOW_DESTRUCTIVE=1 to allow irreversible writes.",
+    });
+    expect((await cli(app, ["delete-post", "--id", "1", "--confirm", "--agent"], { env: { ...env, PAGE_ALLOW_DELETE: "true" } })).code).toBe(0);
+    expect((await cli(app, ["--help"], { env })).stdout).toMatch(/PAGE_ALLOW_DESTRUCTIVE=1\s+turn the irreversible writes on/);
+  });
+
+  it("still says which setting turned writes off when one did", async () => {
+    const refused = await cli(app, ["create-post", "--text", "x", "--agent"], { env: { PAGE_ALLOW_WRITE: "true", PAGE_READ_ONLY: "1" } });
+    expect(JSON.parse(refused.stderr)).toMatchObject({ error: "create-post is unavailable: PAGE_READ_ONLY=1 hides every write.", hint: "Unset PAGE_READ_ONLY to allow writes." });
+  });
+});
+
+describe("a tool whose name the CLI already uses", () => {
+  const app = slipway({
+    name: "lib",
+    version: "1.0.0",
+    context: () => ({}),
+    tools: [
+      defineTool({ name: "doctor", command: "check-setup", title: "Check the setup", description: "Check that the library is reachable and the permissions are granted.", risk: "read", handler: () => ({ library: "ok" }) }),
+    ],
+  });
+
+  it("keeps its name over MCP and answers on the CLI under its own command", async () => {
+    const mcp = await connect(app);
+    const names = (await mcp.listTools()).map((tool) => tool.name);
+    await mcp.close();
+    expect(names).toEqual(["doctor"]);
+    const run = await cli(app, ["check-setup", "--agent"], { env: {} });
+    expect(run.code).toBe(0);
+    expect(JSON.parse(run.stdout)).toEqual({ library: "ok" });
+    expect((await cli(app, [], { env: {} })).stdout).toMatch(/check-setup/);
+    const report = await checkApp(app, { env: {} });
+    expect(report.findings.filter((finding) => finding.level === "error")).toEqual([]);
+  });
+
+  it("needs a command made of lowercase words and dashes", () => {
+    expect(() => defineTool({ name: "doctor", command: "Check Setup", title: "Check", description: "Check that the library is reachable.", risk: "read", handler: () => ({}) })).toThrow(/command/);
+  });
+});
+
+describe("bare words for a list", () => {
+  const app = slipway({
+    name: "lib",
+    version: "1.0.0",
+    context: () => ({}),
+    tools: [
+      defineTool({ name: "photo_info", title: "Photo info", description: "Everything known about specific items, by uuid.", input: z.object({ refs: z.array(z.string()) }), risk: "read", handler: (args) => args }),
+      defineTool({ name: "set_title", title: "Set a title", description: "Set the title on one item, by its uuid.", input: z.object({ ref: z.string(), title: z.string() }), risk: "write", handler: (args) => args }),
+    ],
+  });
+
+  it("gives every bare word to a list, and still refuses a second word for one value", async () => {
+    const run = await cli(app, ["photo-info", "a", "b", "c", "--agent"], { env: {} });
+    expect(JSON.parse(run.stdout)).toEqual({ refs: ["a", "b", "c"] });
+    const twice = await cli(app, ["set-title", "a", "b", "--title", "x", "--agent"], { env: {} });
+    expect(twice.code).toBe(2);
+    expect(JSON.parse(twice.stderr).error).toMatch(/Unexpected argument 'b'/);
+  });
+});

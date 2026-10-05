@@ -229,8 +229,10 @@ export function parseToolArgs(
       const target = flags.find((flag) => flag.required && out[flag.key] === undefined);
       if (target) slots.push(target);
     }
+    // The last slot, when it takes a list, takes every bare word left: `photo-info a b c`.
+    const last = slots[slots.length - 1];
     for (const [index, word] of bare.entries()) {
-      const slot = slots[index];
+      const slot = slots[index] ?? (last?.repeatable ? last : undefined);
       if (!slot) throw new UsageError(`Unexpected argument '${word}'.`);
       if (out[slot.key] !== undefined && !slot.repeatable) throw new UsageError(`${slot.flag} was given twice.`);
       assign(slot, coerce(slot, word));

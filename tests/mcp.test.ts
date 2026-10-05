@@ -320,3 +320,27 @@ describe("a write whose arguments decide its risk, over MCP", () => {
     expect(resultData(confirmed)).toEqual({ saved: "publish" });
   });
 });
+
+for (const era of ["legacy", "modern"] as const) {
+  describe(`a channel that pushes events into the session (${era} protocol)`, () => {
+    it("declares claude/channel under experimental, and its onServe notifies the client", async () => {
+      const app = slipway({
+        name: "chat",
+        version: "1.0.0",
+        context: () => ({}),
+        experimental: { "claude/channel": {} },
+        tools: [defineTool({ name: "reply", title: "Reply", description: "Reply in a chat.", input: z.object({ chat_id: z.string(), text: z.string() }), risk: "write", handler: () => ({ sent: true }) })],
+        onServe: async (_ctx, _log, session) => {
+          await session.notify("notifications/claude/channel", { content: "hello", meta: { chat_id: "7" } });
+        },
+      });
+      const mcp = await connect(app, { era, serve: true });
+      for (let i = 0; i < 50 && mcp.notifications.length === 0; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+      const names = (await mcp.listTools()).map((tool) => tool.name);
+      await mcp.close();
+      expect(mcp.initialize.capabilities).toMatchObject({ experimental: { "claude/channel": {} }, tools: {} });
+      expect(names).toEqual(["reply"]);
+      expect(mcp.notifications).toContainEqual({ method: "notifications/claude/channel", params: { content: "hello", meta: { chat_id: "7" } } });
+    });
+  });
+}

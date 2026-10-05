@@ -2,6 +2,13 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.23, 2026-10-05: what Facebook, Telegram and Apple Photos needed
+
+- **A server can be read-only until a setting turns writes on.** Facebook's server never wrote to a Page unless `FACEBOOK_ALLOW_WRITE=true` was set, and never deleted anything without `FACEBOOK_ALLOW_DELETE=true` as well, while Slipway's switches assumed writes are on unless one says otherwise. `defaults.readOnly` and `defaults.allowDestructive` set what happens with nothing set, as a value or a function of the environment, so an older switch keeps working. Every message that names the switch says what is true then: a write hidden by default is "hidden until FACEBOOK_READ_ONLY=0 is set", and the hint is "Set FACEBOOK_READ_ONLY=0 to allow writes.", never "Unset", which would change nothing. Help, `doctor` and the generated docs name the setting that turns writes on.
+- **A server can be a Claude Code channel.** A channel declares `claude/channel` under the `experimental` capabilities and pushes `notifications/claude/channel` events into a running session. An app's new `experimental` field declares capabilities there, and `onServe` gets a third argument, the session, whose `notify` sends one. Telegram's channel declared the capability at the top level, where Claude Code does not look; its port declares it where the channels reference says. The test client records the notifications a server sends, and `connect(app, { serve: true })` runs `onServe` as a stdio server does.
+- **A tool can keep an MCP name the CLI already uses.** Apple Photos has a `doctor` tool that MCP clients and HQ know by name, and `doctor` is also the CLI's own command, so `slipway check` refused it. A tool's new `command` names its CLI command instead, `check-setup` there, and its MCP name stays.
+- **A list takes every bare word left.** `apple-photos-cli photo-info uuid1 uuid2 uuid3` worked in Apple Photos' own CLI and failed on Slipway, which gave each bare word one slot and refused the second. When the last slot takes a list, it now takes every word that is left; a slot that takes one value still refuses a second.
+
 ## 0.1.22, 2026-10-05: what iMessage needed
 
 - **A person approving a call can read more than the audit log keeps.** The approval form showed the call's `summary`, the same line the audit log records. iMessage keeps a message's words out of its log, so its summary says "send a 15-character message to Ana", and a person approving the send in a form could not read what would go. A tool's new `detail`, a function of the arguments like `summary`, is shown in the form between the summary and what the call cannot undo, and never reaches the audit log or the refusal. A `detail` that throws, or says nothing, leaves the form as it was.

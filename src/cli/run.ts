@@ -12,7 +12,7 @@ import type { App, CliIO } from "../app.js";
 import { runDoctor } from "../doctor.js";
 import { EXIT, RefusedError, SlipwayError, UsageError, toSlipwayError } from "../errors.js";
 import { eachPage } from "../pages.js";
-import { visibility, policyEnvNames } from "../policy.js";
+import { visibility, policyEnvNames, switchWords } from "../policy.js";
 import { outputJsonSchema } from "../schema.js";
 import { didYouMean, searchTools } from "../search.js";
 import type { Tool } from "../tool.js";
@@ -159,7 +159,7 @@ export async function runCli(app: App, argv: readonly string[], partial: Partial
 
     if (command === undefined) {
       if (globals.version) return printVersion(app, io);
-      if (globals.help) return print(io, renderGeneralHelp(app, io.bin));
+      if (globals.help) return print(io, renderGeneralHelp(app, io.bin, io.env));
       return print(io, renderList(app, app.tools(io.env), io.bin, io.env));
     }
 
@@ -177,20 +177,28 @@ export async function runCli(app: App, argv: readonly string[], partial: Partial
       });
     }
 
-    const seen = visibility(tool, app.policy(io.env));
+    const policy = app.policy(io.env);
+    const seen = visibility(tool, policy);
     if (!seen.visible && seen.reason === "destructive") {
       const names = policyEnvNames(app.envPrefix);
-      throw new RefusedError(`${tool.command} is unavailable: ${names.allowDestructive}=0 hides the irreversible writes.`, {
-        hint: `Unset ${names.allowDestructive} to allow them.`,
-      });
+      const words = switchWords(policy, names);
+      throw new RefusedError(
+        policy.destructiveOffByDefault
+          ? `${tool.command} is unavailable: the irreversible writes are ${words.destructiveHides}.`
+          : `${tool.command} is unavailable: ${names.allowDestructive}=0 hides the irreversible writes.`,
+        { hint: words.destructiveFix("them") },
+      );
     }
     if (!seen.visible) {
       const names = policyEnvNames(app.envPrefix);
+      const words = switchWords(policy, names);
       throw new UsageError(
         seen.reason === "read-only"
-          ? `${tool.command} is unavailable: ${names.readOnly}=1 hides every write.`
+          ? policy.readOnlyByDefault
+            ? `${tool.command} is unavailable: every write is ${words.readOnlyHides}.`
+            : `${tool.command} is unavailable: ${names.readOnly}=1 hides every write.`
           : `${tool.command} is in a toolset that is off: ${tool.tags.join(", ")}.`,
-        { hint: seen.reason === "read-only" ? `Unset ${names.readOnly} to allow writes.` : `Add one of them to ${names.toolsets}, or set ${names.toolsets}=all.` },
+        { hint: seen.reason === "read-only" ? words.readOnlyFix : `Add one of them to ${names.toolsets}, or set ${names.toolsets}=all.` },
       );
     }
 
@@ -225,7 +233,7 @@ async function runBuiltin(app: App, io: CliIO, command: string, rest: string[], 
   if (globals.help && command === "login" && typeof login === "object") return print(io, `\nUsage: ${io.bin} ${login.usage ?? "login"}\n\n${sentence(login.help)}\n`);
   // Printed steps are their own help.
   if (globals.help && command === "login" && typeof login === "string") return print(io, login);
-  if (globals.help && command !== "help") return print(io, renderGeneralHelp(app, io.bin));
+  if (globals.help && command !== "help") return print(io, renderGeneralHelp(app, io.bin, io.env));
   const target = rest.find((token) => !token.startsWith("-"));
   switch (command) {
     case "tools":
@@ -233,7 +241,7 @@ async function runBuiltin(app: App, io: CliIO, command: string, rest: string[], 
     case "version":
       return printVersion(app, io);
     case "help": {
-      if (!target) return print(io, renderGeneralHelp(app, io.bin));
+      if (!target) return print(io, renderGeneralHelp(app, io.bin, io.env));
       const tool = app.find(target);
       if (!tool) throw new UsageError(`Unknown command '${target}'.`, { hint: `Run \`${app.bins.cli}\` to list commands.` });
       return print(io, renderToolHelp(tool, io.bin, app.definition.flagAliases));

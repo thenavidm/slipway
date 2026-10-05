@@ -6,7 +6,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { Readable } from "node:stream";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
-import { stderrLogger, type App } from "./app.js";
+import { stderrLogger, type App, type ServeSession } from "./app.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import type { Logger } from "./tool.js";
 import { UsageError } from "./errors.js";
 
@@ -20,7 +21,8 @@ import { UsageError } from "./errors.js";
  */
 export async function serveStdioApp(app: App, env: NodeJS.ProcessEnv): Promise<void> {
   const log = stderrLogger(app.envPrefix, env);
-  const handle = serveStdio(() => app.createServer(env));
+  let server: McpServer | undefined;
+  const handle = serveStdio(() => (server = app.createServer(env)));
 
   let closing = false;
   const shutdown = () => {
@@ -31,14 +33,29 @@ export async function serveStdioApp(app: App, env: NodeJS.ProcessEnv): Promise<v
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  void afterStart(app, env, log);
+  void afterStart(app, env, log, sessionOf(() => server));
 }
+
+/** The session `onServe` gets: `notify` writes to the server stdio is serving, once it has one. */
+export function sessionOf(current: () => McpServer | undefined): ServeSession {
+  return {
+    async notify(method, params) {
+      const server = current();
+      if (!server) return false;
+      await server.server.notification({ method, ...(params ? { params } : {}) } as Parameters<McpServer["server"]["notification"]>[0]);
+      return true;
+    },
+  };
+}
+
+/** Over HTTP no session is waiting for a notification, so `notify` sends nothing. */
+const NO_SESSION: ServeSession = { notify: async () => false };
 
 /**
  * Once the server is answering: say if nothing is configured, then run the
  * app's `onServe`. Nothing here can hold up the handshake or stop the server.
  */
-export async function afterStart(app: App, env: NodeJS.ProcessEnv, log: Logger): Promise<void> {
+export async function afterStart(app: App, env: NodeJS.ProcessEnv, log: Logger, session: ServeSession = NO_SESSION): Promise<void> {
   let ctx: unknown;
   try {
     ctx = await app.context(env);
@@ -50,7 +67,7 @@ export async function afterStart(app: App, env: NodeJS.ProcessEnv, log: Logger):
     return;
   }
   try {
-    await app.definition.onServe?.(ctx, log);
+    await app.definition.onServe?.(ctx, log, session);
   } catch (error) {
     log.warn(app.secrets.redact((error as Error)?.message ?? String(error)));
   }

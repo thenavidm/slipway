@@ -12,6 +12,7 @@ export type {
   InvokeOptions,
   PromptDefinition,
   ResourceDefinition,
+  ServeSession,
   ServiceSetting,
 } from "./app.js";
 

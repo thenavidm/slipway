@@ -7,7 +7,7 @@
 
 import type { App } from "../app.js";
 import { EXIT } from "../errors.js";
-import { policyEnvNames, riskMark, switchesThatApply, visibility } from "../policy.js";
+import { policyEnvNames, riskMark, switchesThatApply, switchWords, visibility } from "../policy.js";
 import { firstSentence } from "../search.js";
 import type { Tool } from "../tool.js";
 import { flagsFor, type Flag } from "./flags.js";
@@ -77,8 +77,9 @@ function hiddenNote(app: App, env: NodeJS.ProcessEnv): string[] {
     const sets = [...off].sort();
     lines.push(`  ${byToolset} more ${byToolset === 1 ? "command is" : "commands are"} in ${sets.join(", ")}, off: ${names.toolsets}=${sets.join(",")} turns ${byToolset === 1 ? "it" : "them"} on.`);
   }
-  if (byReadOnly) lines.push(`  ${byReadOnly} ${byReadOnly === 1 ? "write is" : "writes are"} hidden by ${names.readOnly}=1.`);
-  if (byDestructive) lines.push(`  ${byDestructive} irreversible ${byDestructive === 1 ? "write is" : "writes are"} hidden by ${names.allowDestructive}=0.`);
+  const words = switchWords(policy, names);
+  if (byReadOnly) lines.push(`  ${byReadOnly} ${byReadOnly === 1 ? "write is" : "writes are"} ${words.readOnlyHides}.`);
+  if (byDestructive) lines.push(`  ${byDestructive} irreversible ${byDestructive === 1 ? "write is" : "writes are"} ${words.destructiveHides}.`);
   return lines.length ? [...lines, ``] : [];
 }
 
@@ -220,9 +221,10 @@ function table(rows: Array<[string, string]>): (row: [string, string]) => string
   return ([left, help]) => (left.length <= WIDE ? `  ${left.padEnd(width)}${help}` : `  ${left}\n  ${" ".repeat(width)}${help}`);
 }
 
-export function renderGeneralHelp(app: App, bin: string): string {
+export function renderGeneralHelp(app: App, bin: string, env: NodeJS.ProcessEnv = process.env): string {
   const names = policyEnvNames(app.envPrefix);
   const applies = switchesThatApply(app.allTools);
+  const policy = app.policy(env);
   const cache = app.allTools.some((tool) => tool.cache);
   const sync = app.allTools.some((tool) => tool.sync);
   // An agent often reads this first and pays for it again on every later step, so the
@@ -264,13 +266,18 @@ export function renderGeneralHelp(app: App, bin: string): string {
   ];
   const settings: Array<[string, string]> = [
     ...(app.definition.settings ?? []).filter((setting) => !setting.tuning).map((setting): [string, string] => [setting.env, setting.description]),
-    ...(applies.readOnly ? ([[`${names.readOnly}=1`, "hide and refuse every write"]] as Array<[string, string]>) : []),
+    // A server that is off by default names the setting that turns writes on.
+    ...(applies.readOnly
+      ? ([policy.readOnlyByDefault ? [`${names.readOnly}=0`, "turn writes on"] : [`${names.readOnly}=1`, "hide and refuse every write"]] as Array<[string, string]>)
+      : []),
     ...(applies.allowDestructive
       ? ([
-          [
-            `${names.allowDestructive}=0`,
-            `${app.definition.defaults?.destructiveOff === "hide" ? "hide and refuse" : "refuse"} the irreversible writes${app.allTools.some((tool) => tool.spends) ? " and paid calls" : ""}`,
-          ],
+          policy.destructiveOffByDefault
+            ? [`${names.allowDestructive}=1`, `turn the irreversible writes${app.allTools.some((tool) => tool.spends) ? " and paid calls" : ""} on`]
+            : [
+                `${names.allowDestructive}=0`,
+                `${app.definition.defaults?.destructiveOff === "hide" ? "hide and refuse" : "refuse"} the irreversible writes${app.allTools.some((tool) => tool.spends) ? " and paid calls" : ""}`,
+              ],
         ] as Array<[string, string]>)
       : []),
     // With no tagged tool every tool is always on, so the switch would do nothing.

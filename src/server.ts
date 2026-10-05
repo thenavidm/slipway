@@ -60,6 +60,9 @@ function progressFor(ctx: ServerContext): Progress | undefined {
   };
 }
 
+/** The capabilities McpServer takes, whose experimental values the SDK types as JSON. */
+type Capabilities = NonNullable<NonNullable<ConstructorParameters<typeof McpServer>[1]>["capabilities"]>;
+
 export function buildServer<Ctx>(app: App<Ctx>, env: NodeJS.ProcessEnv): McpServer {
   const policy = app.policy(env);
   const server = new McpServer(
@@ -71,6 +74,7 @@ export function buildServer<Ctx>(app: App<Ctx>, env: NodeJS.ProcessEnv): McpServ
     },
     {
       ...(app.instructions ? { instructions: app.instructions } : {}),
+      ...(app.definition.experimental ? { capabilities: { experimental: app.definition.experimental } as Capabilities } : {}),
       // Approval forms carry signed state; anything Slipway did not sign is refused before a handler sees it.
       requestState: { verify: verifyApprovalState },
     },

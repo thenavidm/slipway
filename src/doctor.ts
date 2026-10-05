@@ -10,7 +10,7 @@ import { accessSync, constants } from "node:fs";
 import { dirname } from "node:path";
 import type { App, CliIO, DoctorCheck } from "./app.js";
 import { EXIT, NotConfiguredError, SlipwayError } from "./errors.js";
-import { policyEnvNames } from "./policy.js";
+import { policyEnvNames, switchWords } from "./policy.js";
 
 export async function runDoctor(app: App, io: CliIO, options: { network: boolean; json: boolean }): Promise<number> {
   const checks: DoctorCheck[] = [];
@@ -22,13 +22,18 @@ export async function runDoctor(app: App, io: CliIO, options: { network: boolean
   checks.push({ name: "Version", ok: true, detail: `${app.name} ${app.version}` });
 
   const paid = app.allTools.some((tool) => tool.spends) ? " and paid" : "";
+  const words = switchWords(policy, names);
   const writes = !app.allTools.some((tool) => tool.risk !== "read")
     ? "none: every tool only reads"
     : policy.readOnly
-      ? "off (read-only)"
+      ? policy.readOnlyByDefault
+        ? `off: ${words.readOnly}`
+        : "off (read-only)"
       : policy.allowDestructive
         ? "on"
-        : `on, irreversible${paid} ones refused`;
+        : policy.destructiveOffByDefault
+          ? `on, irreversible${paid} ones off until ${names.allowDestructive}=1 is set`
+          : `on, irreversible${paid} ones refused`;
   checks.push({ name: "Writes", ok: true, detail: writes });
   checks.push({
     name: "Tools",

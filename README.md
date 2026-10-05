@@ -207,6 +207,7 @@ The context is built on the first call that needs it, never at startup, and so i
 | Field | What it does |
 |---|---|
 | `name` | snake_case. The MCP tool name; the CLI command is the same name with dashes |
+| `command` | The CLI command, when the name with dashes is taken by one of the CLI's own, such as `doctor`. The MCP name stays |
 | `title` | A few words for pickers and the command list |
 | `description` | What it does and when to use it. The only documentation a model reads before calling |
 | `input` | A Zod object, or `jsonSchema({...})` for a tool generated from an API contract |
@@ -438,7 +439,9 @@ Errors are JSON on stderr, always, with `error`, `code` and a `hint` that names 
 
 HTTP binds `127.0.0.1` and checks the Host header, so a web page cannot reach it through a name that resolves to localhost, and it refuses a request whose Origin is another site unless `<PREFIX>_HTTP_ALLOWED_ORIGINS` lists it, as the MCP transport spec asks. It refuses to listen on any other address without `<PREFIX>_HTTP_TOKEN`, because anyone who reached the port would act as your account.
 
-Work that belongs to a running server goes in `onServe(ctx, log)`, which runs once the server is answering over either transport and never for a CLI command: a queue that publishes on time, or a warning that a token expires this week. A throw there is logged and the server keeps serving.
+Work that belongs to a running server goes in `onServe(ctx, log, session)`, which runs once the server is answering over either transport and never for a CLI command: a queue that publishes on time, or a warning that a token expires this week. A throw there is logged and the server keeps serving.
+
+A Claude Code channel pushes events into a running session. Declare `experimental: { "claude/channel": {} }` and send each event from `onServe` with `session.notify("notifications/claude/channel", { content, meta })`; `notify` resolves false over HTTP, where no session is waiting. Check who sent an event before you push it, because whatever you push becomes text in front of the model.
 
 Resources and prompts are optional and take a few lines each:
 
@@ -553,8 +556,8 @@ Every server reads these, under its own prefix: the app name in capitals, `NOTES
 
 | Variable | Default | What it does |
 |---|---|---|
-| `<PREFIX>_READ_ONLY` | `0` | `1` hides and refuses every write |
-| `<PREFIX>_ALLOW_DESTRUCTIVE` | `1` | `0` keeps writes and refuses the irreversible ones; an app with `defaults: { destructiveOff: "hide" }` also leaves them out of the list |
+| `<PREFIX>_READ_ONLY` | `0` | `1` hides and refuses every write. An app with `defaults: { readOnly: true }`, or a function of the environment, is read-only until it is `0` |
+| `<PREFIX>_ALLOW_DESTRUCTIVE` | `1` | `0` keeps writes and refuses the irreversible ones; an app with `defaults: { destructiveOff: "hide" }` also leaves them out of the list, and one with `defaults: { allowDestructive: false }` refuses them until it is `1` |
 | `<PREFIX>_AUDIT_LOG` | none | File that records every attempted write |
 | `<PREFIX>_CONFIRM` | `human` | `model` lets `confirm: true` alone confirm, for an agent with no person to ask |
 | `<PREFIX>_CACHE` | `1` | `0` never answers from the local cache |

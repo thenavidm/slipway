@@ -105,6 +105,12 @@ type Returns<O> = O extends Schema ? InferInput<O> : unknown;
 export type ToolDefinition<Ctx, I extends Schema, O extends Schema | undefined> = {
   /** snake_case. The MCP tool name; the CLI command is the same name with dashes. */
   name: string;
+  /**
+   * The CLI command, when the name with dashes is taken: a tool named `doctor`
+   * keeps that name over MCP, where clients know it, and the CLI's own `doctor`
+   * would otherwise hide it.
+   */
+  command?: string;
   /** A few words for pickers and the command list: "Delete a post". */
   title: string;
   /** What it does and when to reach for it. The only documentation a model reads before calling. */
@@ -266,6 +272,9 @@ export function defineTool<Ctx = unknown, I extends Schema = Schema<Record<strin
   }
   if (typeof definition.handler !== "function") throw new Error(`${where}: handler is required.`);
   if (definition.detail !== undefined && typeof definition.detail !== "function") throw new Error(`${where}: detail must be a function of the arguments.`);
+  if (definition.command !== undefined && !/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(definition.command)) {
+    throw new Error(`${where}: command '${definition.command}' must be lowercase words joined by dashes.`);
+  }
   if (definition.spends && definition.risk === "read") throw new Error(`${where}: a read cannot spend; make it a write.`);
   if (definition.riskFor !== undefined) {
     if (typeof definition.riskFor !== "function") throw new Error(`${where}: riskFor must be a function of the arguments.`);
@@ -327,7 +336,7 @@ export function defineTool<Ctx = unknown, I extends Schema = Schema<Record<strin
   return Object.freeze({
     kind: "slipway.tool" as const,
     name: definition.name,
-    command: definition.name.replace(/_/g, "-"),
+    command: definition.command ?? definition.name.replace(/_/g, "-"),
     title: definition.title.trim(),
     description: definition.description.trim(),
     risk: definition.risk,

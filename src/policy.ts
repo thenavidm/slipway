@@ -25,7 +25,11 @@ export type ConfirmMode = "human" | "model";
 
 export type Policy = {
   readOnly: boolean;
+  /** Read-only because the server is by default and nothing set `<PREFIX>_READ_ONLY`, so the way out is setting it to 0. */
+  readOnlyByDefault: boolean;
   allowDestructive: boolean;
+  /** Irreversible writes off because the server keeps them off by default and nothing set `<PREFIX>_ALLOW_DESTRUCTIVE`. */
+  destructiveOffByDefault: boolean;
   auditLog?: string;
   /** `all`, or the toolsets that are on. Tools with no tags are always on. */
   toolsets: "all" | ReadonlySet<string>;
@@ -55,6 +59,19 @@ export type PolicyDefaults = {
    * keeps doing so.
    */
   destructiveOff?: "refuse" | "hide";
+  /**
+   * Whether writes are off when `<PREFIX>_READ_ONLY` is unset. False unless the
+   * server was read-only by default before it moved. A function receives the
+   * environment, so an older switch keeps working, such as a
+   * `<PREFIX>_ALLOW_WRITE=true` that turned writes on.
+   */
+  readOnly?: boolean | ((env: NodeJS.ProcessEnv) => boolean);
+  /**
+   * Whether irreversible writes are on when `<PREFIX>_ALLOW_DESTRUCTIVE` is
+   * unset. True unless the server kept them off by default. A function
+   * receives the environment, as for `readOnly`.
+   */
+  allowDestructive?: boolean | ((env: NodeJS.ProcessEnv) => boolean);
 };
 
 export type PolicyEnv = {
@@ -110,6 +127,31 @@ function flag(value: string | undefined, fallback: boolean): boolean {
   return fallback;
 }
 
+/** Whether a switch was set to something `flag` reads, rather than left to the default. */
+function isSet(value: string | undefined): boolean {
+  return value !== undefined && (TRUE.test(value.trim()) || FALSE.test(value.trim()));
+}
+
+/**
+ * How messages name the read-only and irreversible-write switches: the setting
+ * that turned writes off, or, on a server that is off by default, the one that
+ * turns them on. "Unset X" is wrong advice when nothing set X.
+ */
+export function switchWords(policy: Pick<Policy, "readOnlyByDefault" | "destructiveOffByDefault">, names: PolicyEnv) {
+  return {
+    /** Why a write is off: "this server is running with X_READ_ONLY=1". */
+    readOnly: policy.readOnlyByDefault ? `this server is read-only until ${names.readOnly}=0 is set` : `this server is running with ${names.readOnly}=1`,
+    readOnlyFix: policy.readOnlyByDefault ? `Set ${names.readOnly}=0 to allow writes.` : `Unset ${names.readOnly} to allow writes.`,
+    readOnlyHides: policy.readOnlyByDefault ? `hidden until ${names.readOnly}=0 is set` : `hidden by ${names.readOnly}=1`,
+    /** Why an irreversible write is off. */
+    destructive: policy.destructiveOffByDefault
+      ? `irreversible writes are off until ${names.allowDestructive}=1 is set`
+      : `this server is running with ${names.allowDestructive}=0`,
+    destructiveFix: (what: string) => (policy.destructiveOffByDefault ? `Set ${names.allowDestructive}=1 to allow ${what}.` : `Unset ${names.allowDestructive} to allow ${what}.`),
+    destructiveHides: policy.destructiveOffByDefault ? `hidden until ${names.allowDestructive}=1 is set` : `hidden by ${names.allowDestructive}=0`,
+  };
+}
+
 export function readPolicy(env: NodeJS.ProcessEnv, prefix: string, defaults: PolicyDefaults = {}): Policy {
   const names = policyEnvNames(prefix);
   const rawToolsets = env[names.toolsets]?.trim();
@@ -130,10 +172,15 @@ export function readPolicy(env: NodeJS.ProcessEnv, prefix: string, defaults: Pol
   const surface = env[names.surface]?.trim().toLowerCase();
   const timeout = Number(env[names.toolTimeoutMs]);
   const confirm = env[names.confirm]?.trim().toLowerCase();
-  const allowDestructive = flag(env[names.allowDestructive], true);
+  const byDefault = (value: boolean | ((env: NodeJS.ProcessEnv) => boolean) | undefined, otherwise: boolean): boolean =>
+    value === undefined ? otherwise : typeof value === "function" ? value(env) : value;
+  const allowDestructive = flag(env[names.allowDestructive], byDefault(defaults.allowDestructive, true));
+  const readOnly = flag(env[names.readOnly], byDefault(defaults.readOnly, false));
   return {
-    readOnly: flag(env[names.readOnly], false),
+    readOnly,
+    readOnlyByDefault: readOnly && !isSet(env[names.readOnly]),
     allowDestructive,
+    destructiveOffByDefault: !allowDestructive && !isSet(env[names.allowDestructive]),
     auditLog: env[names.auditLog]?.trim() || undefined,
     toolsets,
     surface: surface === "search" || surface === "full" ? surface : (defaults.surface ?? "full"),
