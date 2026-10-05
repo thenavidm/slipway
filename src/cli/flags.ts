@@ -8,7 +8,7 @@
 
 import { readFileSync } from "node:fs";
 import { UsageError } from "../errors.js";
-import type { JsonSchema } from "../schema.js";
+import { resolveLocalRef, type JsonSchema } from "../schema.js";
 import { didYouMean } from "../search.js";
 
 export type FlagKind = "string" | "number" | "integer" | "boolean" | "enum" | "json";
@@ -27,6 +27,7 @@ export type Flag = {
 };
 
 type Node = {
+  $ref?: string;
   type?: string | string[];
   description?: string;
   enum?: unknown[];
@@ -38,26 +39,27 @@ type Node = {
   default?: unknown;
 };
 
-/** The first concrete type, looking through nullable unions and type lists. */
-function concrete(node: Node): Node {
+/** The first concrete type, looking through references, nullable unions and type lists. */
+function concrete(raw: Node, root: JsonSchema): Node {
+  const node = resolveLocalRef(root, raw);
   const union = node.anyOf ?? node.oneOf;
   if (union) {
-    const options = union.filter((option) => option.type !== "null");
+    const options = union.map((option) => resolveLocalRef(root, option)).filter((option) => option.type !== "null");
     // A union of plain literals is an enum in disguise, which a person types as a word.
     if (options.length > 1 && options.every((option) => option.const !== undefined)) {
       return { ...node, enum: options.map((option) => option.const) };
     }
-    return concrete({ ...(options[0] ?? {}), description: node.description ?? options[0]?.description });
+    return concrete({ ...(options[0] ?? {}), description: node.description ?? options[0]?.description }, root);
   }
   if (Array.isArray(node.type)) return { ...node, type: node.type.find((type) => type !== "null") ?? "string" };
   return node;
 }
 
-function kindOf(node: Node): { kind: FlagKind; repeatable: boolean; choices?: string[] } {
-  const n = concrete(node);
+function kindOf(node: Node, root: JsonSchema): { kind: FlagKind; repeatable: boolean; choices?: string[] } {
+  const n = concrete(node, root);
   if (n.enum) return { kind: "enum", repeatable: false, choices: n.enum.map(String) };
   if (n.type === "array") {
-    const item = concrete(n.items ?? {});
+    const item = concrete(n.items ?? {}, root);
     if (item.enum) return { kind: "enum", repeatable: true, choices: item.enum.map(String) };
     if (item.type === "object" || item.type === "array") return { kind: "json", repeatable: true };
     if (item.type === "number" || item.type === "integer" || item.type === "boolean") return { kind: item.type, repeatable: true };
@@ -76,11 +78,11 @@ export function flagsFor(schema: JsonSchema): Flag[] {
   const properties = (schema.properties as Record<string, Node> | undefined) ?? {};
   const required = new Set((schema.required as string[] | undefined) ?? []);
   return Object.entries(properties).map(([key, node]) => {
-    const n = concrete(node);
+    const n = concrete(node, schema);
     return {
       key,
       flag: flagName(key),
-      ...kindOf(node),
+      ...kindOf(node, schema),
       required: required.has(key),
       help: (node.description ?? n.description ?? "").trim(),
       ...(node.default !== undefined ? { default: node.default } : n.default !== undefined ? { default: n.default } : {}),

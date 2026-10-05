@@ -22,7 +22,13 @@ export async function runDoctor(app: App, io: CliIO, options: { network: boolean
   checks.push({ name: "Version", ok: true, detail: `${app.name} ${app.version}` });
 
   const paid = app.allTools.some((tool) => tool.spends) ? " and paid" : "";
-  const writes = policy.readOnly ? "off (read-only)" : policy.allowDestructive ? "on" : `on, irreversible${paid} ones refused`;
+  const writes = !app.allTools.some((tool) => tool.risk !== "read")
+    ? "none: every tool only reads"
+    : policy.readOnly
+      ? "off (read-only)"
+      : policy.allowDestructive
+        ? "on"
+        : `on, irreversible${paid} ones refused`;
   checks.push({ name: "Writes", ok: true, detail: writes });
   checks.push({
     name: "Tools",
@@ -58,13 +64,17 @@ export async function runDoctor(app: App, io: CliIO, options: { network: boolean
   }
 
   let configured = true;
+  let unreadable = false;
   let ctx: unknown;
   try {
     ctx = await app.context(io.env);
   } catch (error) {
     configured = false;
+    unreadable = true;
     const e = error instanceof SlipwayError ? error : new NotConfiguredError(String((error as Error)?.message ?? error));
-    checks.push({ name: "Setup", ok: false, detail: e.message, fix: e.hint ?? `Run \`${app.bins.cli} login\`.` });
+    // Outside doctor, a setting that cannot be read points here; in here, it points at how to set it.
+    const fix = e.hint && !e.hint.includes(`${app.bins.cli} doctor`) ? e.hint : `Run \`${app.bins.cli} login\` for what to set.`;
+    checks.push({ name: "Setup", ok: false, detail: e.message, fix });
   }
 
   if (ctx !== undefined && app.definition.configured) {
@@ -102,7 +112,8 @@ export async function runDoctor(app: App, io: CliIO, options: { network: boolean
       lines.push(`  ${mark} ${check.name.padEnd(width)}${app.secrets.redact(check.detail ?? "")}`);
       if (!check.ok && check.fix) lines.push(`    ${" ".repeat(width)}${check.fix}`);
     }
-    lines.push(``, code === EXIT.ok ? "  Ready." : code === EXIT.notConfigured ? "  Nothing is configured yet." : "  Something needs fixing.", ``);
+    const verdict = code === EXIT.ok ? "Ready." : unreadable ? "A setting needs fixing." : code === EXIT.notConfigured ? "Nothing is configured yet." : "Something needs fixing.";
+    lines.push(``, `  ${verdict}`, ``);
     io.stdout(lines.join("\n"));
   }
   return code;

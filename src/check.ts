@@ -17,7 +17,7 @@ import { agentContext } from "./cli/context.js";
 import { flagsFor } from "./cli/flags.js";
 import { BUILTINS, GLOBAL_FLAGS, renderToolHelp } from "./cli/help.js";
 import { connectInMemory } from "./rpc.js";
-import { repeatedDefinitions, schemaBytes, validate, formatIssues, type JsonSchema } from "./schema.js";
+import { repeatedDefinitions, resolveLocalRef, schemaBytes, shareRepeats, validate, formatIssues, type JsonSchema } from "./schema.js";
 import { REQUIRES_USER_INTERACTION } from "./server.js";
 import type { Tool } from "./tool.js";
 
@@ -143,7 +143,7 @@ export async function checkApp(app: App, options: CheckOptions = {}): Promise<Ch
     for (const name of Object.keys(properties)) {
       if (!PROPERTY.test(name)) add("error", "schema", `Property '${name}' must be 1-64 letters, digits, '_', '.' or '-'.`, tool.name);
     }
-    const undocumented = Object.entries(properties).filter(([name, prop]) => name !== "confirm" && !prop.description).map(([name]) => name);
+    const undocumented = Object.entries(properties).filter(([name, prop]) => name !== "confirm" && !resolveLocalRef(schema, prop).description).map(([name]) => name);
     if (undocumented.length) add("warn", "descriptions", `No description for: ${undocumented.join(", ")}.`, tool.name);
     const problem = meta?.(schema);
     if (problem) add("error", "schema", `Not valid JSON Schema 2020-12: ${problem}`, tool.name);
@@ -159,8 +159,11 @@ export async function checkApp(app: App, options: CheckOptions = {}): Promise<Ch
     const bytes = schemaBytes(schema);
     totalBytes += bytes;
     if (!largest || bytes > largest.bytes) largest = { name: tool.name, bytes };
-    if (bytes > budget.errorBytes) add("error", "size", `The schema is ${Math.round(bytes / 1024)} KB. Advertise a short schema and validate the full one in the handler.`, tool.name);
-    else if (bytes > budget.warnBytes) add("warn", "size", `The schema is ${Math.round(bytes / 1024)} KB, which a model pays for every time it loads this tool.`, tool.name);
+    // Sharing the repeated parts is the fix that loses nothing, so it is named first wherever it would help.
+    const shared = bytes > budget.warnBytes ? schemaBytes(shareRepeats(schema)) : bytes;
+    const share = shared < bytes * 0.8 ? ` jsonSchema(schema, { shareRepeats: true }) writes each repeated part once and brings it to ${Math.round(shared / 1024)} KB, with nothing lost.` : "";
+    if (bytes > budget.errorBytes) add("error", "size", `The schema is ${Math.round(bytes / 1024)} KB.${share} ${share ? "Or advertise" : "Advertise"} a short schema and validate the full one in the handler.`, tool.name);
+    else if (bytes > budget.warnBytes) add("warn", "size", `The schema is ${Math.round(bytes / 1024)} KB, which a model pays for every time it loads this tool.${share}`, tool.name);
     const repeated = repeatedDefinitions(schema);
     if (repeated.length) add("warn", "size", `Definitions appear more than once: ${repeated.slice(0, 5).join(", ")}${repeated.length > 5 ? "…" : ""}.`, tool.name);
 

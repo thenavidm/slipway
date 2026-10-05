@@ -18,7 +18,7 @@ export type {
 export { defineTool, isTool, toolkit } from "./tool.js";
 export type { CacheOptions, Logger, Paginate, Risk, RunContext, Surface, SyncOptions, Tool, ToolContext, ToolDefinition, ToolExample } from "./tool.js";
 
-export { emptyInput, inputJsonSchema, jsonSchema, outputJsonSchema, validate, CONFIRM_DESCRIPTION } from "./schema.js";
+export { emptyInput, inputJsonSchema, jsonSchema, outputJsonSchema, shareRepeats, validate, CONFIRM_DESCRIPTION } from "./schema.js";
 export type { InferInput, InferOutput, JsonSchema, Schema } from "./schema.js";
 
 export {

@@ -4,7 +4,7 @@ import { formatOutput, selectFields } from "../src/cli/output.js";
 import { EXIT, httpError, toSlipwayError } from "../src/errors.js";
 import { defineTool, Secrets, slipway, z } from "../src/index.js";
 import { readPolicy } from "../src/policy.js";
-import { inputJsonSchema } from "../src/schema.js";
+import { inputJsonSchema, jsonSchema, resolveLocalRef, shareRepeats, type JsonSchema } from "../src/schema.js";
 
 describe("flags", () => {
   const schema = inputJsonSchema(
@@ -170,5 +170,92 @@ describe("definitions", () => {
     });
     const app = slipway({ name: "probe", version: "1", context: () => ({ client: new Client() }), tools: [tool] });
     expect(await app.invoke("probe", {}, { surface: "cli", env: {} })).toEqual({ origin: "https://api.example", reply: "pong", surface: "cli" });
+  });
+});
+
+/** A schema with every local reference written out again, to compare with what went in. */
+function inlined(root: JsonSchema, node: unknown = root): unknown {
+  if (Array.isArray(node)) return node.map((item) => inlined(root, item));
+  if (node === null || typeof node !== "object") return node;
+  const resolved = resolveLocalRef(root, node as Record<string, unknown>);
+  return Object.fromEntries(Object.entries(resolved).filter(([key]) => node !== root || key !== "$defs").map(([key, value]) => [key, inlined(root, value)]));
+}
+
+describe("shareRepeats", () => {
+  const style = {
+    type: "object",
+    description: "How the block looks on the web and in the email.",
+    properties: Object.fromEntries(["background_color", "text_color", "border_color", "padding", "margin", "alignment"].map((name) => [name, { type: "string", description: `The block's ${name.replace("_", " ")}.` }])),
+  };
+  const block = (kind: string, extra: Record<string, unknown>) => ({
+    type: "object",
+    properties: { type: { type: "string", enum: [kind] }, visual_settings: style, ...extra },
+    required: ["type"],
+  });
+  const blocks = { type: "array", description: "The post's content.", items: { oneOf: [block("paragraph", { text: { type: "string" } }), block("image", { image_url: { type: "string" }, caption: { type: "string" } }), block("quote", { quote: { type: "string" } })] } };
+  const post: JsonSchema = { type: "object", properties: { title: { type: "string" }, blocks, payload: { type: "object", description: "The whole body.", properties: { title: { type: "string" }, blocks } } }, required: ["title"] };
+
+  it("writes each repeated part once, names it, and loses nothing", () => {
+    const shared = shareRepeats(post);
+    expect(JSON.stringify(shared).length).toBeLessThan(JSON.stringify(post).length / 2);
+    expect(Object.keys(shared.$defs as object)).toEqual(expect.arrayContaining(["blocks", "visual_settings"]));
+    expect(inlined(shared)).toEqual(post);
+  });
+
+  it("leaves small repeats inline, and a schema with nothing to share as it was", () => {
+    const small: JsonSchema = { type: "object", properties: { a: { type: "string" }, b: { type: "string" } } };
+    expect(shareRepeats(small)).toBe(small);
+  });
+
+  it("keeps a schema whose references point anywhere but its definitions as it was", () => {
+    const pointing: JsonSchema = { ...post, properties: { ...(post.properties as object), again: { $ref: "#/properties/blocks" } } };
+    expect(shareRepeats(pointing)).toBe(pointing);
+  });
+
+  it("refers an inline copy of an existing definition to it, keeping its name", () => {
+    const withDefs: JsonSchema = { type: "object", properties: { one: style, two: style }, $defs: { look: style } };
+    const shared = shareRepeats(withDefs);
+    expect(shared.properties).toEqual({ one: { $ref: "#/$defs/look" }, two: { $ref: "#/$defs/look" } });
+    expect(Object.keys(shared.$defs as object)).toEqual(["look"]);
+  });
+
+  it("keeps both names of two definitions with the same body, so a reference to either still resolves", () => {
+    const twins: JsonSchema = { type: "object", properties: { a: { $ref: "#/$defs/first" }, b: { $ref: "#/$defs/second" }, c: style, d: style }, $defs: { first: style, second: style } };
+    const shared = shareRepeats(twins);
+    expect(Object.keys(shared.$defs as object).sort()).toEqual(["first", "second"]);
+    expect(inlined(shared)).toEqual(inlined(twins));
+  });
+
+  it("derives the same flags, and accepts and refuses the same arguments", async () => {
+    const shared = shareRepeats(post);
+    expect(flagsFor(shared)).toEqual(flagsFor(post));
+    const full = jsonSchema(post);
+    const lean = jsonSchema(post, { shareRepeats: true });
+    expect(inputJsonSchema(lean)).toEqual(shared);
+    for (const value of [{ title: "Hi", blocks: [{ type: "image", image_url: "https://example.com/a.png" }] }, { title: "Hi", blocks: [{ type: "video" }] }, { blocks: [] }]) {
+      expect(Boolean((await lean["~standard"].validate(value)).issues)).toBe(Boolean((await full["~standard"].validate(value)).issues));
+    }
+  });
+
+  it("is linear in the schema's size", () => {
+    const many = { ...post, properties: Object.fromEntries(Array.from({ length: 400 }, (_, i) => [`blocks_${i}`, blocks])) };
+    const start = performance.now();
+    const shared = shareRepeats(many);
+    expect(performance.now() - start).toBeLessThan(500);
+    expect(inlined(shared)).toEqual(many);
+  });
+});
+
+describe("flags through references", () => {
+  it("reads a property that is only a reference as the definition it points to", () => {
+    const schema: JsonSchema = {
+      type: "object",
+      properties: { blocks: { type: "array", items: { $ref: "#/$defs/block" } }, look: { $ref: "#/$defs/style" }, size: { $ref: "#/$defs/size", description: "How big." } },
+      $defs: { block: { type: "object", properties: { kind: { type: "string" } } }, style: { type: "object", description: "How it looks." }, size: { type: "string", enum: ["s", "m"] } },
+    };
+    const by = Object.fromEntries(flagsFor(schema).map((flag) => [flag.key, flag]));
+    expect(by.blocks).toMatchObject({ kind: "json", repeatable: true });
+    expect(by.look).toMatchObject({ kind: "json", help: "How it looks." });
+    expect(by.size).toMatchObject({ kind: "enum", choices: ["s", "m"], help: "How big." });
   });
 });

@@ -2,6 +2,13 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.13, 2026-10-05: what Beehiiv needed
+
+- **`jsonSchema(schema, { shareRepeats: true })` writes each repeated part of a contract schema once.** A schema generated from an API contract often spells one definition out everywhere it is used. Beehiiv's post body repeats its block styling in each of 33 block types and carries the body twice, as its own fields and as `payload`, so its create-post tool advertised 387 KB. With each repeated part under `$defs` and referred to with `$ref`, it is 40 KB, and Beehiiv's 117 tools together go from 1,684 KB to 308 KB. Nothing is lost: each part reads the same once the references are followed, Claude Code and Codex both read fields that appear only under `$defs`, and validation accepts and refuses the same arguments. Definitions take the name of the property or block type they came from, such as `paragraph` or `visual_settings`, and parts under 200 bytes stay inline. The work is linear in the schema's size and happens when the tool is first listed. `shareRepeats()` is exported for a schema built some other way.
+- **`slipway check` names that fix wherever it would help.** A schema over the size budget whose shared form is at least a fifth smaller says how big it would be.
+- **CLI flags read through `$ref`.** An array whose items were a reference became a repeatable text flag, so a list of objects could not be passed; it is a JSON flag again, and a property that is only a reference takes its type, choices and description from the definition. `slipway check` no longer warns that such a property has no description.
+- **`doctor` tells a server that only reads apart.** "Writes: on" read as if it could change something; it now says every tool only reads. A setting doctor cannot read points at `login` for what to set, where it told the person to run the doctor they were running, and the verdict says a setting needs fixing rather than that nothing is configured.
+
 ## 0.1.12, 2026-10-05: what the Meta Ad Library needed
 
 - **The write switches appear only where they act.** `<PREFIX>_READ_ONLY` and `<PREFIX>_AUDIT_LOG` are listed in the general help, `agent-context` and the generated settings table only when a tool writes, and `<PREFIX>_ALLOW_DESTRUCTIVE` and `<PREFIX>_CONFIRM` only when a tool can be irreversible, spends money or needs confirming. The Meta Ad Library server only reads, and its help offered to "refuse the irreversible writes"; it is now 40 tokens shorter, 399 against 439. The switches still work if set.

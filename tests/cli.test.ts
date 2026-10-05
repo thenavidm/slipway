@@ -487,6 +487,30 @@ describe("CLI: doctor that always calls the service", () => {
   });
 });
 
+describe("CLI: doctor's own words", () => {
+  const reader = (context: () => unknown) =>
+    slipway({
+      name: "reader",
+      version: "1.0.0",
+      context,
+      tools: [defineTool({ name: "get_note", title: "Get a note", description: "Read one note by its id.", input: z.object({ id: z.string() }), risk: "read", handler: () => ({}) })],
+    });
+
+  it("says an app that only reads has no writes, rather than that they are on", async () => {
+    const run = await cli(reader(() => ({})), ["doctor"]);
+    expect(run.stdout).toMatch(/Writes +none: every tool only reads/);
+  });
+
+  it("points a setting it cannot read at login, not back at doctor, and says a setting needs fixing", async () => {
+    const run = await cli(reader(() => { throw new Error("READER_ACCOUNTS must be a JSON array."); }), ["doctor"]);
+    expect(run.code).toBe(10);
+    expect(run.stdout).toContain("READER_ACCOUNTS must be a JSON array.");
+    expect(run.stdout).toContain("Run `reader-cli login` for what to set.");
+    expect(run.stdout).not.toContain("reader-cli doctor` to see");
+    expect(run.stdout).toContain("A setting needs fixing.");
+  });
+});
+
 describe("a write whose arguments decide its risk", () => {
   const audit = join(mkdtempSync(join(tmpdir(), "slipway-riskfor-")), "audit.jsonl");
   const saved: string[] = [];

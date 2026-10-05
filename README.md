@@ -255,6 +255,8 @@ export const renameCourse = defineTool({
 });
 ```
 
+A contract schema often spells one definition out everywhere it is used. `jsonSchema(schema, { shareRepeats: true })` advertises it with each repeated part written once under `$defs` and referred to with `$ref`. Beehiiv's create-post tool went from 387 KB to 40 KB this way, and nothing is lost: Claude Code and Codex both read fields that appear only under `$defs`, validation accepts and refuses the same arguments, and the CLI's flags read through the references. `slipway check` says when it would help, and by how much.
+
 ## 4. Safety
 
 Shipping no writes is not safety: it hands the work back to a person. Shipping them unguarded is worse. So every write works, and the irreversible ones need a confirmation the caller gives on purpose.
