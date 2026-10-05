@@ -573,6 +573,7 @@ See [CHANGELOG.md](CHANGELOG.md).
 | Server | Package | Covers |
 | --- | --- | --- |
 | [Bluesky](https://github.com/thenavidm/bluesky-mcp-cli) | [`@thenavidm/bluesky-mcp-cli`](https://www.npmjs.com/package/@thenavidm/bluesky-mcp-cli) 2.0.0 | Posting, threads, replies, the timeline, search, feeds, lists, notifications and the social graph |
+| [Google Photos](https://github.com/thenavidm/google-photos-mcp-cli) | [`@thenavidm/google-photos-mcp-cli`](https://www.npmjs.com/package/@thenavidm/google-photos-mcp-cli) 2.0.0 | The photo picker, uploads, albums and their captions, places and maps, and media this server uploaded, across several Google accounts |
 | [Mastodon](https://github.com/thenavidm/mastodon-mcp-cli) | [`@thenavidm/mastodon-mcp-cli`](https://www.npmjs.com/package/@thenavidm/mastodon-mcp-cli) 2.0.0 | Posting, editing, threads, timelines, search, lists, notifications and following, on any instance |
 | [Midjourney](https://github.com/thenavidm/midjourney-mcp-cli) | [`@thenavidm/midjourney-mcp-cli`](https://www.npmjs.com/package/@thenavidm/midjourney-mcp-cli) 2.0.0 | Generating images and video, following jobs, downloads, moodboards, the account's library and the explore feeds, through a signed-in browser |
 | [Substack](https://github.com/thenavidm/substack-mcp-cli) | [`@thenavidm/substack-mcp-cli`](https://www.npmjs.com/package/@thenavidm/substack-mcp-cli) 3.0.0 | Drafts, publishing and scheduling, Notes, subscribers, analytics, tags, comments and researching other publications |
