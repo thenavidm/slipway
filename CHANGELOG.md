@@ -2,6 +2,10 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.20, 2026-10-05: what Gumloop and Wistia needed
+
+- **Each answer from `which` stays on one line.** A description wrapped to a width, or one whose summary line has no full stop, put a line break inside its first sentence, so `which` printed the rest of that sentence on a line of its own, cut off mid-word: Gumloop's `start-flow` read "This endpoint is used to trigger a flow run via API" and then "Explicit confirmation is re…". A line break now ends the first sentence when a blank line or a capital letter follows it, and reads as a space otherwise. 57 tools on eight servers had such a line, 27 of them Wistia's. The summaries `search_tools` returns are made the same way.
+
 ## 0.1.19, 2026-10-05: what Lemon Squeezy needed
 
 - **`which` answers with a command's help when one fits well ahead of the rest.** An agent asked `which` for the command and then read that command's `--help`, and each request carries the whole conversation. On Lemon Squeezy, `which cancel subscription` and then `cancel-subscription --help` cost Codex a median of 83,076 input tokens, where its 2.x CLI guessed the command's name and read its help in two requests for 61,541. When the first answer scores at least half again as much as the second, its help now follows the list, and three runs took 61,903, 61,913 and 61,908 in two requests. A close second gets the list alone: Gumroad's `which refund` fits refunding a sale and its refund policy alike, and the help shown would be a guess between them.

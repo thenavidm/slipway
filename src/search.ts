@@ -146,8 +146,12 @@ export function didYouMean(input: string, candidates: readonly string[]): string
   return best?.candidate;
 }
 
-/** The first sentence of a description, for one-line listings. */
+/**
+ * The first sentence of a description, for one-line listings. A description wrapped to a width
+ * reads on as one line, and a summary line with no full stop ends at its line break: Gumloop's
+ * "List saved flows" is followed by "Read operation." on the next line.
+ */
 export function firstSentence(text: string, max = 100): string {
-  const first = text.trim().split(/(?<=[.!?])\s/)[0] ?? "";
+  const first = (text.trim().split(/(?<=[.!?])\s|\n\s*\n|\n(?=\s*[A-Z])/)[0] ?? "").replace(/\s+/g, " ").trim();
   return first.length > max ? `${first.slice(0, max - 1).trimEnd()}…` : first;
 }

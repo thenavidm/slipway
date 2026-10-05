@@ -77,6 +77,26 @@ describe("CLI: discovery", () => {
     expect(await line("list", "forms")).toBe("  list-forms  List forms: Read every form on the site.");
   });
 
+  it("keeps each command on one line when its description has line breaks", async () => {
+    const tool = (name: string, title: string, description: string) => defineTool({ name, title, description, risk: "read", handler: () => ({}) });
+    const app = slipway({
+      name: "probe",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [
+        // A summary line with no full stop, a sentence wrapped to a width, and a list after a blank line.
+        tool("list_flows", "List saved flows", "List saved flows\nRead operation."),
+        tool("list_deleted_media", "List deleted media", "List deleted media still inside the\nrestore window. Media is listed only while it can be restored."),
+        tool("estimate_pricing", "Estimate pricing", "Estimate pricing by one of two methods:\n\n- by unit price\n- by history"),
+      ],
+    });
+    const line = async (...words: string[]) => (await cli(app, ["which", ...words])).stdout.split("\n")[0];
+    expect(await line("saved", "flows")).toBe("  list-flows  List saved flows");
+    expect(await line("deleted", "media")).toBe("  list-deleted-media  List deleted media still inside the restore window.");
+    expect(await line("estimate", "pricing")).toBe("  estimate-pricing  Estimate pricing by one of two methods:");
+    expect((await cli(app, [])).stdout).not.toMatch(/inside the\n|\nRead operation|\n- by/);
+  });
+
   it("lists only the close matches, at least three, so the answer costs less to read than the list", async () => {
     const tools = Array.from({ length: 12 }, (_, i) =>
       defineTool({ name: `get_post_report_${i}`, title: `Get post report ${i}`, description: `Read the report on post number ${i}, with its totals.`, risk: "read", handler: () => ({}) }),
