@@ -572,6 +572,7 @@ See [CHANGELOG.md](CHANGELOG.md).
 
 | Server | Package | Covers |
 | --- | --- | --- |
+| [Apple Podcasts](https://github.com/thenavidm/apple-podcasts-mcp-cli) | [`@thenavidm/apple-podcasts-mcp-cli`](https://www.npmjs.com/package/@thenavidm/apple-podcasts-mcp-cli) 2.0.0 | The catalog, charts per country, reviews and feeds, your library on this Mac with its transcript excerpts, and analytics for a show you own |
 | [Bluesky](https://github.com/thenavidm/bluesky-mcp-cli) | [`@thenavidm/bluesky-mcp-cli`](https://www.npmjs.com/package/@thenavidm/bluesky-mcp-cli) 2.0.0 | Posting, threads, replies, the timeline, search, feeds, lists, notifications and the social graph |
 | [Google Photos](https://github.com/thenavidm/google-photos-mcp-cli) | [`@thenavidm/google-photos-mcp-cli`](https://www.npmjs.com/package/@thenavidm/google-photos-mcp-cli) 2.0.0 | The photo picker, uploads, albums and their captions, places and maps, and media this server uploaded, across several Google accounts |
 | [Mastodon](https://github.com/thenavidm/mastodon-mcp-cli) | [`@thenavidm/mastodon-mcp-cli`](https://www.npmjs.com/package/@thenavidm/mastodon-mcp-cli) 2.0.0 | Posting, editing, threads, timelines, search, lists, notifications and following, on any instance |
