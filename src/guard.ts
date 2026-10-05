@@ -59,9 +59,12 @@ export class Guard {
 
     if (this.policy.readOnly && tool.risk !== "read") {
       this.record(tool, summary, "blocked: read-only");
-      throw new RefusedError(`${tool.name} is unavailable: this server is running with ${names.readOnly}=1.`, {
-        hint: `Unset ${names.readOnly} to allow writes.`,
-      });
+      // A tool kept for its reads is listed, so the refusal says why this call is not one.
+      const message =
+        tool.whenReadOnly === "reads"
+          ? `${tool.name} only reads while this server is running with ${names.readOnly}=1, and this call writes. About to: ${sentenceBody(summary)}.`
+          : `${tool.name} is unavailable: this server is running with ${names.readOnly}=1.`;
+      throw new RefusedError(message, { hint: `Unset ${names.readOnly} to allow writes.` });
     }
 
     if ((tool.risk === "destructive" || tool.spends) && !this.policy.allowDestructive) {

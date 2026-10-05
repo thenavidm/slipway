@@ -133,6 +133,12 @@ export type ToolDefinition<Ctx, I extends Schema, O extends Schema | undefined> 
    */
   riskFor?: (args: InferOutput<I>) => Risk;
   /**
+   * What `<PREFIX>_READ_ONLY=1` does with this write: `hide` it, the default,
+   * or keep it for `reads`, the calls `riskFor` puts at `read`, and refuse
+   * every other call. For a raw API tool, whose GET only reads.
+   */
+  whenReadOnly?: "hide" | "reads";
+  /**
    * The call spends money or credits: a paid generation, a billed send. It
    * needs confirming, `<PREFIX>_ALLOW_DESTRUCTIVE=0` refuses it, and the CLI
    * marks it `$`, while clients still see a plain write, because making an
@@ -193,6 +199,8 @@ export type Tool<Ctx = any> = {
   readonly spends: boolean;
   /** The risk of one call, from its arguments. `forCall` applies it. */
   readonly riskFor?: (args: any) => Risk;
+  /** Read-only mode keeps this write for the calls `riskFor` puts at `read`. */
+  readonly whenReadOnly?: "reads";
   /** What a confirmed call does that cannot be taken back, in the tool's own words. */
   readonly consequence?: string;
   readonly tags: readonly string[];
@@ -253,6 +261,12 @@ export function defineTool<Ctx = unknown, I extends Schema = Schema<Record<strin
     if (typeof definition.riskFor !== "function") throw new Error(`${where}: riskFor must be a function of the arguments.`);
     if (definition.risk === "read") throw new Error(`${where}: riskFor is for a write whose arguments decide how far it reaches; a read has nothing to decide.`);
   }
+  if (definition.whenReadOnly !== undefined && definition.whenReadOnly !== "hide" && definition.whenReadOnly !== "reads") {
+    throw new Error(`${where}: whenReadOnly is "hide" or "reads".`);
+  }
+  if (definition.whenReadOnly === "reads" && !definition.riskFor) {
+    throw new Error(`${where}: whenReadOnly "reads" keeps the calls riskFor puts at read, so it needs riskFor.`);
+  }
   const job = definition.job;
   if (job) {
     if (definition.name.length > 57) throw new Error(`${where}: a job tool's name is at most 57 characters, so its status tool fits in 64.`);
@@ -312,6 +326,7 @@ export function defineTool<Ctx = unknown, I extends Schema = Schema<Record<strin
     requireConfirm,
     spends: definition.spends === true,
     ...(definition.riskFor ? { riskFor: definition.riskFor as (args: any) => Risk } : {}),
+    ...(definition.whenReadOnly === "reads" ? { whenReadOnly: "reads" as const } : {}),
     ...(definition.consequence?.trim() ? { consequence: definition.consequence.trim().replace(/\.$/, "") } : {}),
     tags: Object.freeze([...(definition.tags ?? [])]),
     examples: Object.freeze([...(definition.examples ?? [])]),

@@ -638,6 +638,55 @@ describe("a write whose arguments decide its risk", () => {
   });
 });
 
+describe("a write kept for its reads in read-only mode", () => {
+  const audit = join(mkdtempSync(join(tmpdir(), "slipway-reads-")), "audit.jsonl");
+  const app = slipway({
+    name: "api",
+    version: "1.0.0",
+    context: () => ({}),
+    tools: [
+      defineTool({
+        name: "api_raw",
+        title: "Call any API method",
+        description: "Call any method of the API. A GET only reads; a POST writes, and a DELETE cannot be undone.",
+        input: z.object({ method: z.enum(["GET", "POST", "DELETE"]), path: z.string() }),
+        risk: "destructive",
+        riskFor: (args) => (args.method === "GET" ? "read" : args.method === "DELETE" ? "destructive" : "write"),
+        whenReadOnly: "reads",
+        summary: (args) => `${args.method} ${args.path}`,
+        handler: (args) => ({ ran: `${args.method} ${args.path}` }),
+      }),
+      defineTool({ name: "api_post", title: "Post", description: "Post something.", input: z.object({ text: z.string() }), risk: "write", handler: () => ({}) }),
+    ],
+  });
+  const env = { API_READ_ONLY: "1", API_AUDIT_LOG: audit };
+
+  it("stays listed, runs a read, and refuses a write saying why", async () => {
+    const list = (await cli(app, [], { env })).stdout;
+    expect(list).toMatch(/api-raw/);
+    expect(list).not.toMatch(/api-post/);
+    expect((await cli(app, ["api-raw", "--method", "GET", "--path", "/x", "--agent"], { env })).code).toBe(0);
+    const write = await cli(app, ["api-raw", "--method", "POST", "--path", "/x", "--agent"], { env });
+    expect(write.code).toBe(2);
+    expect(JSON.parse(write.stderr)).toMatchObject({ code: "refused", hint: "Unset API_READ_ONLY to allow writes." });
+    expect(JSON.parse(write.stderr).error).toBe("api_raw only reads while this server is running with API_READ_ONLY=1, and this call writes. About to: POST /x.");
+    const deleted = await cli(app, ["api-raw", "--method", "DELETE", "--path", "/x", "--confirm", "--agent"], { env });
+    expect(deleted.code).toBe(2);
+    const outcomes = readFileSync(audit, "utf8").trim().split("\n").map((line) => JSON.parse(line)).map((entry) => `${entry.risk} ${entry.outcome}`);
+    expect(outcomes).toEqual(["write blocked: read-only", "destructive blocked: read-only"]);
+  });
+
+  it("is hidden like any write without it", async () => {
+    expect((await cli(app, ["api-post", "--text", "x", "--agent"], { env })).code).toBe(2);
+  });
+
+  it("needs riskFor to say which calls only read", () => {
+    expect(() =>
+      defineTool({ name: "api_put", title: "Put", description: "Put something.", risk: "write", whenReadOnly: "reads", handler: () => ({}) }),
+    ).toThrow(/needs riskFor/);
+  });
+});
+
 describe("a tool's own consequence, and a switch that would do nothing", () => {
   const app = slipway({
     name: "shop",

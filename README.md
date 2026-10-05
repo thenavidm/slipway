@@ -214,6 +214,7 @@ The context is built on the first call that needs it, never at startup, and so i
 | `risk` | `read`, `write` (easy to undo) or `destructive` (public, irreversible, or both) |
 | `requireConfirm` | Defaults to true for destructive tools. Set it on a write that spends money |
 | `riskFor` | `(args) => risk`, when the arguments decide it: publishing is destructive, saving a draft is a write. `risk` stays the highest, which clients see; the guard, confirmation and audit log go by the call |
+| `whenReadOnly` | `"reads"` keeps a write in read-only mode for the calls `riskFor` puts at `read`, such as a raw API tool's GET, and refuses the rest. `"hide"`, the default, hides it |
 | `spends` | The call spends money or credits, a paid generation: it needs confirming, `<PREFIX>_ALLOW_DESTRUCTIVE=0` refuses it, and the CLI marks it `$`, while clients still see a write |
 | `consequence` | What a confirmed call does, in the tool's own words for the refusal and the approval form: "moves money and cannot be undone". Defaults to "is public or cannot be undone" |
 | `idempotent`, `openWorld` | Annotation hints. Reads are idempotent by default; every tool is open world unless it never leaves the machine |
@@ -285,7 +286,7 @@ Three switches belong to whoever runs the server, under the server's own prefix:
 
 | Setting | Effect |
 |---|---|
-| `<PREFIX>_READ_ONLY=1` | Every write disappears from both surfaces, and a direct call is refused |
+| `<PREFIX>_READ_ONLY=1` | Every write disappears from both surfaces, and a direct call is refused. A tool marked `whenReadOnly: "reads"` stays for its reads |
 | `<PREFIX>_ALLOW_DESTRUCTIVE=0` | Writes stay, irreversible ones are refused |
 | `<PREFIX>_AUDIT_LOG=<file>` | Every attempted write is appended to this file, with its outcome and who confirmed it |
 | `<PREFIX>_CONFIRM=model` | `confirm: true` alone confirms, and nobody is asked. For an agent with no person to ask |

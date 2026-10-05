@@ -258,6 +258,37 @@ describe("advertised records", () => {
   });
 });
 
+describe("a write kept for its reads in read-only mode, over MCP", () => {
+  it("is listed, runs a read, and refuses a delete even when confirmed", async () => {
+    const app = slipway({
+      name: "api",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [
+        defineTool({
+          name: "api_raw",
+          title: "Call any API method",
+          description: "Call any method of the API. A GET only reads; a DELETE cannot be undone.",
+          input: z.object({ method: z.enum(["GET", "DELETE"]), path: z.string() }),
+          risk: "destructive",
+          riskFor: (args) => (args.method === "GET" ? "read" : "destructive"),
+          whenReadOnly: "reads",
+          handler: (args) => ({ ran: `${args.method} ${args.path}` }),
+        }),
+      ],
+    });
+    const env = { API_READ_ONLY: "1", API_CONFIRM: "model" };
+    const mcp = await connect(app, { env });
+    const names = (await mcp.listTools()).map((tool) => tool.name);
+    const read = await mcp.callTool("api_raw", { method: "GET", path: "/x" });
+    const deleted = await mcp.callTool("api_raw", { method: "DELETE", path: "/x", confirm: true });
+    await mcp.close();
+    expect(names).toEqual(["api_raw"]);
+    expect(resultData(read)).toEqual({ ran: "GET /x" });
+    expect(payload(deleted)).toMatchObject({ code: "refused" });
+  });
+});
+
 describe("a write whose arguments decide its risk, over MCP", () => {
   it("lists the highest risk, runs a draft without confirm, and refuses to publish without it", async () => {
     const app = slipway({

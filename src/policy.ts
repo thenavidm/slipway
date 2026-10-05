@@ -147,8 +147,8 @@ export function readPolicy(env: NodeJS.ProcessEnv, prefix: string, defaults: Pol
 export type Visibility = { visible: true } | { visible: false; reason: "read-only" | "destructive" | "toolset" };
 
 /** Whether a tool is on under this policy, and if not, why, so a refusal can say how to turn it on. */
-export function visibility(tool: Pick<Tool, "risk" | "tags"> & { spends?: boolean }, policy: Policy): Visibility {
-  if (policy.readOnly && tool.risk !== "read") return { visible: false, reason: "read-only" };
+export function visibility(tool: Pick<Tool, "risk" | "tags"> & { spends?: boolean; whenReadOnly?: "reads" }, policy: Policy): Visibility {
+  if (policy.readOnly && tool.risk !== "read" && tool.whenReadOnly !== "reads") return { visible: false, reason: "read-only" };
   if (policy.hideDestructive && (tool.risk === "destructive" || tool.spends === true)) return { visible: false, reason: "destructive" };
   if (policy.toolsets !== "all" && tool.tags.length > 0) {
     const on = policy.toolsets;

@@ -2,6 +2,10 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.21, 2026-10-05: what Google Workspace needed
+
+- **Read-only mode can keep a raw tool for its reads.** `<PREFIX>_READ_ONLY=1` hides every write, and a tool whose `riskFor` decides each call still counts as its highest risk there. Google Workspace's `workspace_raw` reaches about 400 API methods, a GET among them only reads, and its own 0.2.2 kept it in read-only mode and refused each call that would write. On Slipway it disappeared. A write that sets `whenReadOnly: "reads"` now stays listed in read-only mode: the calls its `riskFor` puts at `read` run, and every other call is refused, confirmed or not, with a refusal that says the tool only reads while read-only mode is on and what the call was about to do. It needs `riskFor`, and without it a write is hidden as before.
+
 ## 0.1.20, 2026-10-05: what Gumloop and Wistia needed
 
 - **Each answer from `which` stays on one line.** A description wrapped to a width, or one whose summary line has no full stop, put a line break inside its first sentence, so `which` printed the rest of that sentence on a line of its own, cut off mid-word: Gumloop's `start-flow` read "This endpoint is used to trigger a flow run via API" and then "Explicit confirmation is re…". A line break now ends the first sentence when a blank line or a capital letter follows it, and reads as a space otherwise. 57 tools on eight servers had such a line, 27 of them Wistia's. The summaries `search_tools` returns are made the same way.
