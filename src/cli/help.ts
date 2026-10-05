@@ -61,10 +61,12 @@ function hiddenNote(app: App, env: NodeJS.ProcessEnv): string[] {
   const off = new Set<string>();
   let byToolset = 0;
   let byReadOnly = 0;
+  let byDestructive = 0;
   for (const tool of app.allTools) {
     const seen = visibility(tool, policy);
     if (seen.visible) continue;
     if (seen.reason === "read-only") byReadOnly += 1;
+    else if (seen.reason === "destructive") byDestructive += 1;
     else {
       byToolset += 1;
       for (const tag of tool.tags) if (policy.toolsets === "all" || !policy.toolsets.has(tag)) off.add(tag);
@@ -76,6 +78,7 @@ function hiddenNote(app: App, env: NodeJS.ProcessEnv): string[] {
     lines.push(`  ${byToolset} more ${byToolset === 1 ? "command is" : "commands are"} in ${sets.join(", ")}, off: ${names.toolsets}=${sets.join(",")} turns ${byToolset === 1 ? "it" : "them"} on.`);
   }
   if (byReadOnly) lines.push(`  ${byReadOnly} ${byReadOnly === 1 ? "write is" : "writes are"} hidden by ${names.readOnly}=1.`);
+  if (byDestructive) lines.push(`  ${byDestructive} irreversible ${byDestructive === 1 ? "write is" : "writes are"} hidden by ${names.allowDestructive}=0.`);
   return lines.length ? [...lines, ``] : [];
 }
 
@@ -215,17 +218,18 @@ export function renderGeneralHelp(app: App, bin: string): string {
   const sync = app.allTools.some((tool) => tool.sync);
   const jobs = app.allTools.some((tool) => tool.job);
   // An agent often reads this first and pays for it again on every later step, so the
-  // rarely needed commands share one line and Slipway's own settings say only what they do.
+  // rarely needed commands share one line, an older name for a command is left out, and
+  // Slipway's settings past the two safety switches are named on one line.
   const commands: Array<[string, string]> = [
     [app.bins.cli, "list the commands"],
-    [`${bin} <command> --help`, "what one takes, with examples"],
+    [`${bin} <command> --help`, "what one takes"],
     [`${bin} which <words>`, "find the command for a task"],
-    [`${bin} doctor${app.definition.doctorNetwork ? "" : " [--network]"}`, "check the setup and say what is wrong"],
+    [`${bin} doctor${app.definition.doctorNetwork ? "" : " [--network]"}`, "check the setup"],
     typeof app.definition.login === "object"
       ? [`${bin} ${app.definition.login.usage ?? "login"}`, app.definition.login.help]
       : [`${bin} login`, "how to connect an account"],
-    ...(app.definition.commands ?? []).map((command): [string, string] => [`${bin} ${command.usage ?? command.name}`, command.help]),
-    [`${bin} install <client>`, "add the server to an MCP client; install --help lists them"],
+    ...(app.definition.commands ?? []).filter((command) => !command.hidden).map((command): [string, string] => [`${bin} ${command.usage ?? command.name}`, command.help]),
+    [`${bin} install <client>`, "add the server to an MCP client"],
     ...(cache || sync ? ([[`${bin} data`, "what is kept on this machine; data clear [<command>] deletes it"]] as Array<[string, string]>) : []),
     ...(sync
       ? ([
@@ -234,28 +238,43 @@ export function renderGeneralHelp(app: App, bin: string): string {
           [`${bin} data sql "<select>"`, "query local data with read-only SQL"],
         ] as Array<[string, string]>)
       : []),
-    [app.bins.mcp, "the MCP server over stdio; --http [--port N] for HTTP"],
+    [app.bins.mcp, "the MCP server; --http [--port N] serves HTTP"],
   ];
-  // Tuning keeps a working default, so it is named on one line; agent-context says what each does.
-  const tuning = (app.definition.settings ?? []).filter((setting) => setting.tuning).map((setting) => setting.env);
+  // Tuning keeps a working default, so it is named on one line with Slipway's own settings past
+  // the two safety switches; agent-context says what each does.
+  const tuning = [
+    ...(app.definition.settings ?? []).filter((setting) => setting.tuning).map((setting) => setting.env),
+    names.surface,
+    names.auditLog,
+    names.toolTimeoutMs,
+    names.confirm,
+    ...(cache ? [names.cache] : []),
+    ...(cache || sync ? [names.dataDir] : []),
+    `${app.envPrefix}_DEBUG`,
+  ];
   const settings: Array<[string, string]> = [
     ...(app.definition.settings ?? []).filter((setting) => !setting.tuning).map((setting): [string, string] => [setting.env, setting.description]),
     [`${names.readOnly}=1`, "hide and refuse every write"],
-    [`${names.allowDestructive}=0`, app.allTools.some((tool) => tool.spends) ? "refuse the irreversible writes and paid calls" : "refuse the irreversible writes"],
+    [
+      `${names.allowDestructive}=0`,
+      `${app.definition.defaults?.destructiveOff === "hide" ? "hide and refuse" : "refuse"} the irreversible writes${app.allTools.some((tool) => tool.spends) ? " and paid calls" : ""}`,
+    ],
     // With no tagged tool every tool is always on, so the switch would do nothing.
     ...(app.allTools.some((tool) => tool.tags.length > 0) ? ([[`${names.toolsets}=a,b`, "only these toolsets, or all"]] as Array<[string, string]>) : []),
-    [`${names.surface}=search`, "MCP lists three finder tools instead"],
-    [`${names.auditLog}=<file>`, "log every attempted write"],
-    [`${names.toolTimeoutMs}=<ms>`, "deadline for any tool"],
-    [`${names.confirm}=model`, "confirm: true alone confirms over MCP"],
-    ...(cache ? ([[`${names.cache}=0`, "never answer from the local cache"]] as Array<[string, string]>) : []),
-    ...(cache || sync ? ([[`${names.dataDir}=<dir>`, "keep local data in this folder"]] as Array<[string, string]>) : []),
     [`${app.envPrefix}_HTTP_PORT / _HOST / _TOKEN / _ALLOWED_ORIGINS`, "for --http"],
-    [`${app.envPrefix}_DEBUG=1`, "debug lines on stderr"],
   ];
-  // Flags that cannot apply here (jobs, the cache) are left out; agent-context lists every one.
+  // The list formats appear in the help of the commands that list; flags that cannot apply
+  // here (jobs, the cache) are left out. agent-context lists every one.
   const flags = GLOBAL_FLAGS.map(([flag]) => flag).filter(
-    (flag) => flag !== "--agent" && (flag !== "--wait" || jobs) && (flag !== "--refresh" || cache),
+    (flag) =>
+      flag !== "--agent" &&
+      flag !== "--jsonl" &&
+      flag !== "--csv / --tsv" &&
+      flag !== "--quiet" &&
+      flag !== "--out <file>" &&
+      flag !== "--timeout <ms>" &&
+      (flag !== "--wait" || jobs) &&
+      (flag !== "--refresh" || cache),
   );
   const commandRow = table(commands);
   const settingRow = table(settings);
@@ -264,13 +283,13 @@ export function renderGeneralHelp(app: App, bin: string): string {
     `${app.title} ${app.version}`,
     ``,
     ...commands.map(commandRow),
-    `  Also: schema <command>, agent-context [--brief] (all of this as JSON), completion <shell>.`,
+    `  Also: schema <command>, agent-context (all of this as JSON), completion <shell>.`,
     ``,
     `Flags: ${flags.join(", ")}, and --agent: compact JSON, no prompts, never confirms a write.`,
     ``,
     `Settings:`,
     ...settings.map(settingRow),
-    ...(tuning.length ? [`  Also: ${tuning.join(", ")}, described in agent-context.`] : []),
+    `  Also: ${tuning.join(", ")}, described in agent-context.`,
     ``,
     `Exit codes: ${EXIT.ok} ok, ${EXIT.error} unexpected, ${EXIT.usage} usage or refused, ${EXIT.notFound} not found, ${EXIT.auth} auth, ${EXIT.api} API, ${EXIT.rateLimited} rate limited, ${EXIT.notConfigured} not configured`,
     ``,

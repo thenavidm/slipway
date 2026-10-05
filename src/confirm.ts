@@ -30,7 +30,7 @@ import {
 } from "@modelcontextprotocol/server";
 import type { App } from "./app.js";
 import { RefusedError } from "./errors.js";
-import { consequence, Guard } from "./guard.js";
+import { consequence, Guard, sentenceBody } from "./guard.js";
 import type { ConfirmMode } from "./policy.js";
 import type { Tool } from "./tool.js";
 import { phrase, sha256, stableJson, versionAtLeast } from "./util.js";
@@ -193,18 +193,18 @@ export async function personApproval<Ctx>(
 
   if (answer.kind === "elicit" && answer.action === "accept") {
     guard.record(tool, summary, "blocked: person declined");
-    throw new RefusedError(`The approval form was accepted without ticking Approve, so ${tool.name} did not run. About to: ${summary}.`, {
+    throw new RefusedError(`The approval form was accepted without ticking Approve, so ${tool.name} did not run. About to: ${sentenceBody(summary)}.`, {
       hint: "Ask the user whether they want this, and call again only if they do.",
     });
   }
   if (answer.kind === "elicit" && answer.action === "cancel") {
     guard.record(tool, summary, "blocked: no answer");
-    throw new RefusedError(`The approval form was closed without an answer, so ${tool.name} did not run. About to: ${summary}.`, {
+    throw new RefusedError(`The approval form was closed without an answer, so ${tool.name} did not run. About to: ${sentenceBody(summary)}.`, {
       hint: "Ask the user whether they want this, and call again only if they do.",
     });
   }
   guard.record(tool, summary, "blocked: person declined");
-  throw new RefusedError(`The approval was declined, so ${tool.name} did not run. About to: ${summary}.`, {
+  throw new RefusedError(`The approval was declined, so ${tool.name} did not run. About to: ${sentenceBody(summary)}.`, {
     hint: "Do not call it again unless the user asks for it.",
   });
 }

@@ -349,10 +349,64 @@ describe("CLI: terminal commands an app adds", () => {
     });
     const help = (await cli(tuned, ["--help"])).stdout;
     expect(help).toContain("A token for the account.");
-    expect(help).toContain("Also: PROBE_TIMEOUT_MS, PROBE_MAX_RETRIES, described in agent-context.");
+    expect(help).toContain("Also: PROBE_TIMEOUT_MS, PROBE_MAX_RETRIES, PROBE_SURFACE, PROBE_AUDIT_LOG, PROBE_TOOL_TIMEOUT_MS, PROBE_CONFIRM, PROBE_DEBUG, described in agent-context.");
+    expect(help).not.toContain("debug lines on stderr");
     expect(help).not.toContain("Per-request deadline");
     const context = JSON.parse((await cli(tuned, ["agent-context"])).stdout);
     expect(context.settings.find((setting: { env: string }) => setting.env === "PROBE_TIMEOUT_MS").description).toBe("Per-request deadline. Defaults to 30000.");
+  });
+});
+
+describe("a hidden command", () => {
+  it("runs and is listed in agent-context, but stays out of the general help", async () => {
+    const ran: string[][] = [];
+    const app = slipway({
+      name: "probe",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [],
+      commands: [{ name: "auth", help: "the same as login, by an older name", hidden: true, run: (_io, args) => (ran.push(args), 0) }],
+    });
+    expect((await cli(app, ["--help"])).stdout).not.toContain("probe-cli auth");
+    expect((await cli(app, ["auth", "x"])).code).toBe(0);
+    expect(ran).toEqual([["x"]]);
+    const context = JSON.parse((await cli(app, ["agent-context"])).stdout);
+    expect(context.extra_commands.map((command: { command: string }) => command.command)).toContain("auth");
+  });
+});
+
+describe("destructive writes off, hidden rather than refused", () => {
+  const app = () =>
+    slipway({
+      name: "post",
+      version: "1.0.0",
+      context: () => ({}),
+      defaults: { destructiveOff: "hide" },
+      tools: [
+        defineTool({ name: "publish", title: "Publish", description: "Publish a post for everyone to see.", risk: "destructive", handler: () => ({ ok: true }) }),
+        defineTool({ name: "draft", title: "Draft", description: "Save a draft only you can see.", risk: "write", handler: () => ({ ok: true }) }),
+        defineTool({ name: "read_post", title: "Read", description: "Read a post back.", risk: "read", handler: () => ({ ok: true }) }),
+      ],
+    });
+  const off = { POST_ALLOW_DESTRUCTIVE: "0" };
+
+  it("leaves them out of both surfaces and says why", async () => {
+    const mcp = await connect(app(), { env: off });
+    const names = (await mcp.listTools()).map((tool) => tool.name).sort();
+    await mcp.close();
+    expect(names).toEqual(["draft", "read_post"]);
+    const list = await cli(app(), [], { env: off });
+    expect(list.stdout).toContain("1 irreversible write is hidden by POST_ALLOW_DESTRUCTIVE=0.");
+    const run = await cli(app(), ["publish", "--confirm"], { env: off });
+    expect(run.code).toBe(2);
+    expect(JSON.parse(run.stderr)).toMatchObject({ code: "refused" });
+    expect(run.stderr).toContain("POST_ALLOW_DESTRUCTIVE=0 hides the irreversible writes");
+  });
+
+  it("lists them as usual when destructive writes are on", async () => {
+    const mcp = await connect(app(), { env: {} });
+    expect((await mcp.listTools()).length).toBe(3);
+    await mcp.close();
   });
 });
 
@@ -460,6 +514,7 @@ describe("a tool's own consequence, and a switch that would do nothing", () => {
         input: z.object({ order: z.string() }),
         risk: "destructive",
         consequence: "moves money and cannot be undone.",
+        summary: (args) => `Refund order ${String(args.order)}.`,
         handler: () => ({ refunded: true }),
       }),
     ],
@@ -469,6 +524,8 @@ describe("a tool's own consequence, and a switch that would do nothing", () => {
     const run = await cli(app, ["refund-order", "--order", "9"]);
     expect(run.code).toBe(2);
     expect(JSON.parse(run.stderr).error).toMatch(/^refund_order moves money and cannot be undone, so it will not run without --confirm/);
+    // A summary that ends its own sentence is not given a second period.
+    expect(JSON.parse(run.stderr).error).toContain("About to: Refund order 9. Call again");
   });
 
   it("leaves out <PREFIX>_TOOLSETS when no tool has a toolset", async () => {

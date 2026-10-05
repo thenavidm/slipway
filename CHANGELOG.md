@@ -2,6 +2,13 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.10, 2026-10-05: what TikTok needed
+
+- **`destructiveOff: "hide"`: a server can take its irreversible tools off the list when they are off.** By default `<PREFIX>_ALLOW_DESTRUCTIVE=0` keeps them listed and refuses each call. With `defaults: { destructiveOff: "hide" }` they leave the MCP tool list and the command list, as read-only mode does with every write, and calling one anyway is refused with the setting to unset. TikTok 1.1 hid its publishing tools this way, and keeps doing so.
+- **A shorter general help, for every server.** An agent reads it first and carries it through every later step. Slipway's settings past the two safety switches are named on the "Also" line with the app's tuning settings, the list formats and `--out` and `--timeout` are left to each command's help and `agent-context`, and the command lines say less. On TikTok it went from 530 tokens to 412, which cut Codex's CLI task by about 350 tokens.
+- **`hidden: true` keeps a command out of the general help**, such as `auth`, the name an older release used for `login`. It still runs, and `agent-context` still lists it.
+- **A refusal no longer doubles a period.** A summary that ends its own sentence, as TikTok's "Publish a video at SELF_ONLY." does, read "About to: Publish a video at SELF_ONLY.." in the refusal and the approval messages.
+
 ## 0.1.9, 2026-10-05: what Substack needed
 
 - **A resource can wait for an account.** `listed(env)` leaves a resource out until it returns true. Substack 2.2.3 offered its two resources only once a publication was connected; on Slipway they were always offered, and Claude Code then adds its own two resource tools to every message: 40 tokens in tool search, for reads that could only fail.

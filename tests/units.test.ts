@@ -133,6 +133,12 @@ describe("policy", () => {
     expect(readPolicy({ X_ENABLE_BETA: "1" }, "X", defaults).toolsets).toBe("all");
     expect([...(readPolicy({ X_ENABLE_BETA: "1", X_TOOLSETS: "beta" }, "X", defaults).toolsets as Set<string>)]).toEqual(["beta"]);
   });
+
+  it("hides the irreversible tools with destructive writes off only when the app asks", () => {
+    expect(readPolicy({ X_ALLOW_DESTRUCTIVE: "0" }, "X").hideDestructive).toBe(false);
+    expect(readPolicy({ X_ALLOW_DESTRUCTIVE: "0" }, "X", { destructiveOff: "hide" }).hideDestructive).toBe(true);
+    expect(readPolicy({}, "X", { destructiveOff: "hide" }).hideDestructive).toBe(false);
+  });
 });
 
 describe("definitions", () => {

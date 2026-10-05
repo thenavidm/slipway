@@ -35,6 +35,8 @@ export type Policy = {
   confirm: ConfirmMode;
   /** Whether reads that opted in may answer from the local cache. */
   cache: boolean;
+  /** Whether the irreversible tools and paid calls are left out of the list, not only refused. */
+  hideDestructive: boolean;
 };
 
 export type PolicyDefaults = {
@@ -46,6 +48,13 @@ export type PolicyDefaults = {
   toolsets?: readonly string[] | "all" | ((env: NodeJS.ProcessEnv) => readonly string[] | "all");
   surface?: ToolSurface;
   confirm?: ConfirmMode;
+  /**
+   * What `<PREFIX>_ALLOW_DESTRUCTIVE=0` does to the irreversible tools and paid
+   * calls: `refuse` each call (the default), or `hide` them from the list, as
+   * read-only mode hides every write. A server that hid them before it moved
+   * keeps doing so.
+   */
+  destructiveOff?: "refuse" | "hide";
 };
 
 export type PolicyEnv = {
@@ -104,23 +113,26 @@ export function readPolicy(env: NodeJS.ProcessEnv, prefix: string, defaults: Pol
   const surface = env[names.surface]?.trim().toLowerCase();
   const timeout = Number(env[names.toolTimeoutMs]);
   const confirm = env[names.confirm]?.trim().toLowerCase();
+  const allowDestructive = flag(env[names.allowDestructive], true);
   return {
     readOnly: flag(env[names.readOnly], false),
-    allowDestructive: flag(env[names.allowDestructive], true),
+    allowDestructive,
     auditLog: env[names.auditLog]?.trim() || undefined,
     toolsets,
     surface: surface === "search" || surface === "full" ? surface : (defaults.surface ?? "full"),
     toolTimeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : undefined,
     confirm: confirm === "human" || confirm === "model" ? confirm : (defaults.confirm ?? "human"),
     cache: flag(env[names.cache], true),
+    hideDestructive: !allowDestructive && defaults.destructiveOff === "hide",
   };
 }
 
-export type Visibility = { visible: true } | { visible: false; reason: "read-only" | "toolset" };
+export type Visibility = { visible: true } | { visible: false; reason: "read-only" | "destructive" | "toolset" };
 
 /** Whether a tool is on under this policy, and if not, why, so a refusal can say how to turn it on. */
-export function visibility(tool: Pick<Tool, "risk" | "tags">, policy: Policy): Visibility {
+export function visibility(tool: Pick<Tool, "risk" | "tags"> & { spends?: boolean }, policy: Policy): Visibility {
   if (policy.readOnly && tool.risk !== "read") return { visible: false, reason: "read-only" };
+  if (policy.hideDestructive && (tool.risk === "destructive" || tool.spends === true)) return { visible: false, reason: "destructive" };
   if (policy.toolsets !== "all" && tool.tags.length > 0) {
     const on = policy.toolsets;
     if (!tool.tags.some((tag) => on.has(tag))) return { visible: false, reason: "toolset" };

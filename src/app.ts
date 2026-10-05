@@ -113,6 +113,11 @@ export type CliCommand = {
    * taken as Slipway's global flag of the same name before the command sees it.
    */
   flags?: readonly string[];
+  /**
+   * Left out of the general help, as for the name an older release used for
+   * `login`. It still runs, and `agent-context` still lists it.
+   */
+  hidden?: boolean;
   run: (io: CliIO, args: string[]) => number | Promise<number>;
 };
 
@@ -611,6 +616,11 @@ function assertVisible(tool: Tool, policy: Policy, envPrefix: string): void {
   if (seen.reason === "read-only") {
     throw new RefusedError(`${tool.name} is unavailable: this server is running with ${names.readOnly}=1.`, {
       hint: `Unset ${names.readOnly} to allow writes.`,
+    });
+  }
+  if (seen.reason === "destructive") {
+    throw new RefusedError(`${tool.name} is unavailable: this server is running with ${names.allowDestructive}=0.`, {
+      hint: `Unset ${names.allowDestructive} to allow irreversible writes.`,
     });
   }
   throw new UsageError(`${tool.name} is in a toolset that is off: ${tool.tags.join(", ")}.`, {

@@ -550,7 +550,7 @@ Every server reads these, under its own prefix: the app name in capitals, `NOTES
 | Variable | Default | What it does |
 |---|---|---|
 | `<PREFIX>_READ_ONLY` | `0` | `1` hides and refuses every write |
-| `<PREFIX>_ALLOW_DESTRUCTIVE` | `1` | `0` keeps writes and refuses the irreversible ones |
+| `<PREFIX>_ALLOW_DESTRUCTIVE` | `1` | `0` keeps writes and refuses the irreversible ones; an app with `defaults: { destructiveOff: "hide" }` also leaves them out of the list |
 | `<PREFIX>_AUDIT_LOG` | none | File that records every attempted write |
 | `<PREFIX>_CONFIRM` | `human` | `model` lets `confirm: true` alone confirm, for an agent with no person to ask |
 | `<PREFIX>_CACHE` | `1` | `0` never answers from the local cache |

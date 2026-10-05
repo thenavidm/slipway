@@ -10,7 +10,7 @@
 import { writeFileSync } from "node:fs";
 import type { App, CliIO } from "../app.js";
 import { runDoctor } from "../doctor.js";
-import { EXIT, SlipwayError, UsageError, toSlipwayError } from "../errors.js";
+import { EXIT, RefusedError, SlipwayError, UsageError, toSlipwayError } from "../errors.js";
 import { eachPage } from "../pages.js";
 import { visibility, policyEnvNames } from "../policy.js";
 import { outputJsonSchema } from "../schema.js";
@@ -178,6 +178,12 @@ export async function runCli(app: App, argv: readonly string[], partial: Partial
     }
 
     const seen = visibility(tool, app.policy(io.env));
+    if (!seen.visible && seen.reason === "destructive") {
+      const names = policyEnvNames(app.envPrefix);
+      throw new RefusedError(`${tool.command} is unavailable: ${names.allowDestructive}=0 hides the irreversible writes.`, {
+        hint: `Unset ${names.allowDestructive} to allow them.`,
+      });
+    }
     if (!seen.visible) {
       const names = policyEnvNames(app.envPrefix);
       throw new UsageError(

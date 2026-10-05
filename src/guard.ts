@@ -84,7 +84,7 @@ export class Guard {
     if (tool.requireConfirm && !options.confirmedBy) {
       this.record(tool, options.summary, "blocked: no confirm");
       throw new RefusedError(
-        `${tool.name} ${consequence(tool)}, so it will not run without ${this.confirmFlag}. About to: ${options.summary}. Call again with ${this.confirmFlag} if that is what was asked for.`,
+        `${tool.name} ${consequence(tool)}, so it will not run without ${this.confirmFlag}. About to: ${sentenceBody(options.summary)}. Call again with ${this.confirmFlag} if that is what was asked for.`,
         { hint: `Pass ${this.confirmFlag} only when the user asked for this exact action.` },
       );
     }
@@ -117,4 +117,9 @@ export function consequence(tool: Pick<Tool, "risk" | "consequence" | "spends">)
   if (tool.consequence) return tool.consequence;
   if (tool.spends) return "spends money and cannot be refunded";
   return tool.risk === "destructive" ? "is public or cannot be undone" : "has an effect that cannot be taken back";
+}
+
+/** A summary that ends its own sentence, "Publish a video.", is not given a second period. */
+export function sentenceBody(text: string): string {
+  return text.trim().replace(/[.!?]+$/, "");
 }
