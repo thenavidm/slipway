@@ -241,8 +241,10 @@ export function renderGeneralHelp(app: App, bin: string): string {
       : []),
     [app.bins.mcp, "the MCP server; --http [--port N] serves HTTP"],
   ];
-  // Tuning keeps a working default, so it is named on one line with Slipway's own settings past
-  // the two safety switches; agent-context says what each does.
+  // Tuning keeps a working default, so it is counted on one line with Slipway's own settings past
+  // the two safety switches and --http's four; agent-context names each and says what it does.
+  // The general help is the first thing an agent reads, and carries it through every later step:
+  // fourteen names cost a 14-tool server more than its whole command list.
   const tuning = [
     ...(app.definition.settings ?? []).filter((setting) => setting.tuning).map((setting) => setting.env),
     names.surface,
@@ -266,8 +268,8 @@ export function renderGeneralHelp(app: App, bin: string): string {
       : []),
     // With no tagged tool every tool is always on, so the switch would do nothing.
     ...(app.allTools.some((tool) => tool.tags.length > 0) ? ([[`${names.toolsets}=a,b`, "only these toolsets, or all"]] as Array<[string, string]>) : []),
-    [`${app.envPrefix}_HTTP_PORT / _HOST / _TOKEN / _ALLOWED_ORIGINS`, "for --http"],
   ];
+  const more = tuning.length + 4;
   // The list formats appear in the help of the commands that list; flags that cannot apply
   // here (jobs, the cache) are left out. agent-context lists every one.
   const flags = GLOBAL_FLAGS.map(([flag]) => flag).filter(
@@ -294,7 +296,7 @@ export function renderGeneralHelp(app: App, bin: string): string {
     ``,
     `Settings:`,
     ...settings.map(settingRow),
-    `  Also: ${tuning.join(", ")}, described in agent-context.`,
+    `  And ${more} more, for tuning and --http: agent-context describes each.`,
     ``,
     `Exit codes: ${EXIT.ok} ok, ${EXIT.error} unexpected, ${EXIT.usage} usage or refused, ${EXIT.notFound} not found, ${EXIT.auth} auth, ${EXIT.api} API, ${EXIT.rateLimited} rate limited, ${EXIT.notConfigured} not configured`,
     ``,

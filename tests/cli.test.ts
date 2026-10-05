@@ -95,14 +95,16 @@ describe("CLI: discovery", () => {
     expect(brief.commands.find((command: { command: string }) => command.command === "get-note")).toEqual({ command: "get-note", title: expect.any(String) });
   });
 
-  it("lists in --help and agent-context every variable the server reads", async () => {
+  it("lists in agent-context every variable the server reads, and names the switches a person needs in --help", async () => {
     const help = (await cli(createApp(), ["--help"])).stdout;
     const context = JSON.parse((await cli(createApp(), ["agent-context"])).stdout);
     const listed = new Set(context.settings.map((setting: { env: string }) => setting.env));
-    for (const name of ["READ_ONLY", "ALLOW_DESTRUCTIVE", "AUDIT_LOG", "TOOLSETS", "SURFACE", "TOOL_TIMEOUT_MS", "CONFIRM", "HTTP_PORT", "HTTP_HOST", "HTTP_TOKEN", "DEBUG"]) {
+    for (const name of ["READ_ONLY", "ALLOW_DESTRUCTIVE", "AUDIT_LOG", "TOOLSETS", "SURFACE", "TOOL_TIMEOUT_MS", "CONFIRM", "HTTP_PORT", "HTTP_HOST", "HTTP_TOKEN", "HTTP_ALLOWED_ORIGINS", "DEBUG"]) {
       expect(listed.has(`NOTES_${name}`)).toBe(true);
-      expect(help).toContain(name === "HTTP_HOST" || name === "HTTP_TOKEN" ? `_${name.slice(5)}` : `NOTES_${name}`);
     }
+    // The safety switches are named in the help; the rest are counted, and agent-context describes them.
+    for (const name of ["READ_ONLY", "ALLOW_DESTRUCTIVE", "TOOLSETS"]) expect(help).toContain(`NOTES_${name}`);
+    expect(help).toMatch(/And \d+ more, for tuning and --http: agent-context describes each\./);
   });
 
   it("suggests the closest command for a typo and exits 2", async () => {
@@ -350,7 +352,9 @@ describe("CLI: terminal commands an app adds", () => {
     const help = (await cli(tuned, ["--help"])).stdout;
     expect(help).toContain("A token for the account.");
     // No tool writes, so the audit log and the confirm switch, which act only on writes, are left out.
-    expect(help).toContain("Also: PROBE_TIMEOUT_MS, PROBE_MAX_RETRIES, PROBE_SURFACE, PROBE_TOOL_TIMEOUT_MS, PROBE_DEBUG, described in agent-context.");
+    // Tuning and Slipway's own settings are counted, not named: agent-context names and describes each.
+    expect(help).toContain("And 9 more, for tuning and --http: agent-context describes each.");
+    expect(help).not.toContain("PROBE_TIMEOUT_MS");
     expect(help).not.toContain("debug lines on stderr");
     expect(help).not.toContain("Per-request deadline");
     const context = JSON.parse((await cli(tuned, ["agent-context"])).stdout);

@@ -2,6 +2,10 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.15, 2026-10-05: what Adobe Firefly needed
+
+- **The general help counts the tuning settings instead of naming them.** An agent reads `--help` first and carries it through every later step, so its length is paid again on each one. Firefly's help named 14 settings on its last line, and with only 14 commands its whole command list was shorter; its Codex CLI task cost 370 more input tokens on Slipway than on its own 2.x CLI. The line now says how many more settings there are and that `agent-context` describes each, the `--http` settings join that count, and the safety switches and the settings an app marks as setup are still named. Every server's help is shorter by the names it had on that line.
+
 ## 0.1.14, 2026-10-05: what Buffer needed
 
 - **`which` and the search surface read what a tool takes.** Argument names count for a little less than the title and more than the description, and camelCase is split, so `channelId` reads as "channel" and `createPost` as "create post". Buffer's "schedule a post to a channel" never listed `create-post`, whose description says neither word but whose `channelId` and `schedulingType` say both; a Codex run that asked `which` then read the whole command list as well.

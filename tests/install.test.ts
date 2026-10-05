@@ -148,14 +148,13 @@ describe("install", () => {
     if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600);
   });
 
-  it("leaves tuning out of every client, while help and agent-context still list it", async () => {
+  it("leaves tuning out of every client, while agent-context still lists it", async () => {
     const where = place();
     const desktop = process.platform === "darwin" || process.platform === "win32" ? (["claude-desktop"] as const) : [];
     for (const client of ["claude-code", "codex", "cursor", "gemini", "vscode", ...desktop] as const) {
       const plan = planInstall(createApp(), { client, scope: client === "vscode" ? "project" : "user", name: "notes", copyEnv: true, local: false }, { env: where.env, cwd: where.project });
       expect(JSON.stringify(plan)).not.toContain("NOTES_TIMEOUT_MS");
     }
-    expect((await cli(createApp(), ["--help"], { env: where.env })).stdout).toContain("NOTES_TIMEOUT_MS");
     const context = JSON.parse((await cli(createApp(), ["agent-context"], { env: where.env })).stdout);
     expect(context.settings.map((setting: { env: string }) => setting.env)).toContain("NOTES_TIMEOUT_MS");
   });
