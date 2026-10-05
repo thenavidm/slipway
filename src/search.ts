@@ -102,7 +102,7 @@ export function searchTools(tools: readonly Tool[], query: string, limit = 10, s
     // What a tool takes says what it is for: `channelId` and `schedulingType` find the post tool for "schedule a post to a channel".
     // Only the words themselves count there. Through a synonym, Google Photos' "photos" read as `media_item_id`
     // and put get_media_item level with the picker for "let me choose photos".
-    const args = Object.keys((tool.jsonSchema.properties as Record<string, unknown> | undefined) ?? {}).filter((key) => key !== "confirm").flatMap(words);
+    const args = tool.argumentNames.filter((key) => key !== "confirm").flatMap(words);
     let score = 0;
     let matched = 0;
     for (const term of terms) {

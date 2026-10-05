@@ -38,7 +38,10 @@ export async function runDoctor(app: App, io: CliIO, options: { network: boolean
   checks.push({
     name: "Tools",
     ok: true,
-    detail: `${app.tools(io.env).length} of ${app.allTools.length} on${policy.toolsets === "all" ? "" : ` (${names.toolsets}=${[...policy.toolsets].join(",")})`}`,
+    // The count an MCP client lists, and the terminal's where the server's defaults give it more.
+    detail: `${app.tools(io.env).length} of ${app.allTools.length} on${policy.toolsets === "all" ? "" : ` (${names.toolsets}=${[...policy.toolsets].join(",")})`}${
+      app.tools(io.env, "cli").length === app.tools(io.env).length ? "" : `, ${app.tools(io.env, "cli").length} in the terminal`
+    }`,
   });
 
   if (policy.auditLog) {

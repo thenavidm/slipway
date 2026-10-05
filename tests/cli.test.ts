@@ -312,6 +312,39 @@ describe("CLI: safety", () => {
     expect(JSON.parse(off.stderr).hint).toContain("NOTES_TOOLSETS");
   });
 
+  it("runs every command in the terminal when the defaults only narrow what an MCP client loads", async () => {
+    // Telegram's older TELEGRAM_TOOLS chose what an MCP client loaded, and its terminal ran every command.
+    const topic = defineTool({
+      name: "create_topic",
+      title: "Create a topic",
+      description: "Create a topic in a forum group, as the account.",
+      risk: "write",
+      tags: ["topics"],
+      input: z.object({ title: z.string() }),
+      handler: ({ title }) => ({ created: title }),
+    });
+    const whoami = defineTool({ name: "whoami", title: "Who am I", description: "Say which account the server acts as.", risk: "read", tags: ["core"], handler: () => ({ me: "ana" }) });
+    const app = slipway({
+      name: "chat",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [whoami, topic],
+      toolsets: { core: "The daily tools.", topics: "Forum topics." },
+      defaults: { toolsets: (_env, on) => (on === "cli" ? "all" : ["core"]) },
+    });
+    const mcp = await connect(app, { env: {} });
+    const listed = (await mcp.listTools()).map((tool) => tool.name);
+    await expect(mcp.callTool("create_topic", { title: "x" })).rejects.toThrow("Tool create_topic not found");
+    await mcp.close();
+    expect(listed).toEqual(["whoami"]);
+    const run = await cli(app, ["create-topic", "--title", "Plans", "--compact"], { env: {} });
+    expect(run).toMatchObject({ code: 0, stdout: '{"created":"Plans"}\n' });
+    expect((await cli(app, [], { env: {} })).stdout).toContain("create-topic");
+    // A variable that is set rules both surfaces.
+    expect((await cli(app, ["create-topic", "--title", "Plans"], { env: { CHAT_TOOLSETS: "core" } })).code).toBe(2);
+    expect((await cli(app, ["doctor"], { env: {} })).stdout).toMatch(/1 of 2 on \(CHAT_TOOLSETS=core\), 2 in the terminal/);
+  });
+
   it("refuses writes in read-only mode with the setting that controls it", async () => {
     const run = await cli(createApp(), ["create-note", "--title", "x"], { env: { NOTES_READ_ONLY: "1" } });
     expect(run.code).toBe(2);

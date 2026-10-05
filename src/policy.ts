@@ -7,7 +7,7 @@
  * the server's own prefix, so two servers in one client never share a switch.
  */
 
-import type { Risk, Tool } from "./tool.js";
+import type { Risk, Surface, Tool } from "./tool.js";
 
 export type ToolSurface = "full" | "search";
 
@@ -47,9 +47,11 @@ export type PolicyDefaults = {
   /**
    * The toolsets on when `<PREFIX>_TOOLSETS` is unset. A function receives the
    * environment, so a server can keep an older switch working, such as a
-   * `<PREFIX>_ENABLE_BETA=1` that predates toolsets.
+   * `<PREFIX>_ENABLE_BETA=1` that predates toolsets, and the surface asking,
+   * so a server whose older switch only decided what an MCP client loads can
+   * leave its terminal running every command.
    */
-  toolsets?: readonly string[] | "all" | ((env: NodeJS.ProcessEnv) => readonly string[] | "all");
+  toolsets?: readonly string[] | "all" | ((env: NodeJS.ProcessEnv, on: Surface) => readonly string[] | "all");
   surface?: ToolSurface;
   confirm?: ConfirmMode;
   /**
@@ -63,15 +65,16 @@ export type PolicyDefaults = {
    * Whether writes are off when `<PREFIX>_READ_ONLY` is unset. False unless the
    * server was read-only by default before it moved. A function receives the
    * environment, so an older switch keeps working, such as a
-   * `<PREFIX>_ALLOW_WRITE=true` that turned writes on.
+   * `<PREFIX>_ALLOW_WRITE=true` that turned writes on, and the surface asking,
+   * as for `toolsets`.
    */
-  readOnly?: boolean | ((env: NodeJS.ProcessEnv) => boolean);
+  readOnly?: boolean | ((env: NodeJS.ProcessEnv, on: Surface) => boolean);
   /**
    * Whether irreversible writes are on when `<PREFIX>_ALLOW_DESTRUCTIVE` is
    * unset. True unless the server kept them off by default. A function
-   * receives the environment, as for `readOnly`.
+   * receives the environment and the surface, as for `readOnly`.
    */
-  allowDestructive?: boolean | ((env: NodeJS.ProcessEnv) => boolean);
+  allowDestructive?: boolean | ((env: NodeJS.ProcessEnv, on: Surface) => boolean);
 };
 
 export type PolicyEnv = {
@@ -152,10 +155,11 @@ export function switchWords(policy: Pick<Policy, "readOnlyByDefault" | "destruct
   };
 }
 
-export function readPolicy(env: NodeJS.ProcessEnv, prefix: string, defaults: PolicyDefaults = {}): Policy {
+/** The policy on one surface: the defaults may differ between an MCP client and the terminal, and a variable that is set applies to both. */
+export function readPolicy(env: NodeJS.ProcessEnv, prefix: string, defaults: PolicyDefaults = {}, on: Surface = "mcp"): Policy {
   const names = policyEnvNames(prefix);
   const rawToolsets = env[names.toolsets]?.trim();
-  const fromDefaults = (typeof defaults.toolsets === "function" ? defaults.toolsets(env) : defaults.toolsets) ?? "all";
+  const fromDefaults = (typeof defaults.toolsets === "function" ? defaults.toolsets(env, on) : defaults.toolsets) ?? "all";
   const toolsets: Policy["toolsets"] =
     rawToolsets === undefined || rawToolsets === ""
       ? fromDefaults === "all"
@@ -172,8 +176,8 @@ export function readPolicy(env: NodeJS.ProcessEnv, prefix: string, defaults: Pol
   const surface = env[names.surface]?.trim().toLowerCase();
   const timeout = Number(env[names.toolTimeoutMs]);
   const confirm = env[names.confirm]?.trim().toLowerCase();
-  const byDefault = (value: boolean | ((env: NodeJS.ProcessEnv) => boolean) | undefined, otherwise: boolean): boolean =>
-    value === undefined ? otherwise : typeof value === "function" ? value(env) : value;
+  const byDefault = (value: boolean | ((env: NodeJS.ProcessEnv, on: Surface) => boolean) | undefined, otherwise: boolean): boolean =>
+    value === undefined ? otherwise : typeof value === "function" ? value(env, on) : value;
   const allowDestructive = flag(env[names.allowDestructive], byDefault(defaults.allowDestructive, true));
   const readOnly = flag(env[names.readOnly], byDefault(defaults.readOnly, false));
   return {

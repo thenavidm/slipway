@@ -16,6 +16,7 @@ import {
   CONTROL_NAMES,
   emptyInput,
   inputJsonSchema,
+  propertyNames,
   isSchema,
   withControls,
   type InferInput,
@@ -241,7 +242,9 @@ export type Tool<Ctx = any> = {
   readonly preview?: (args: any, ctx: ToolContext<Ctx>) => unknown;
   readonly render?: (result: any) => string;
   readonly handler: (args: any, ctx: ToolContext<Ctx>) => unknown;
-  /** The advertised input as JSON Schema, computed once. */
+  /** The names of the advertised input's arguments, `confirm` and `wait_seconds` included when the tool takes them. */
+  readonly argumentNames: readonly string[];
+  /** The advertised input as JSON Schema, computed on first use and kept. */
   readonly jsonSchema: JsonSchema;
 };
 
@@ -314,7 +317,7 @@ export function defineTool<Ctx = unknown, I extends Schema = Schema<Record<strin
   }
 
   const input = advertised((definition.input ?? emptyInput()) as Schema);
-  const own = Object.keys((inputJsonSchema(input).properties as Record<string, unknown> | undefined) ?? {});
+  const own = propertyNames((definition.input ?? emptyInput()) as Schema);
   for (const name of CONTROL_NAMES) {
     if (own.includes(name)) throw new Error(`${where}: '${name}' is Slipway's own argument. Rename the input property.`);
   }
@@ -323,9 +326,9 @@ export function defineTool<Ctx = unknown, I extends Schema = Schema<Record<strin
     confirm: requireConfirm,
     ...(job ? { wait: { defaultSeconds: waitSecondsFor(job), maxSeconds: MAX_WAIT_SECONDS } } : {}),
   }) as Schema;
-  const jsonSchema = inputJsonSchema(schema);
-
-  const properties = Object.keys((jsonSchema.properties as Record<string, unknown> | undefined) ?? {});
+  let jsonSchema: JsonSchema | undefined;
+  // What withControls adds, so no JSON Schema is needed to know the names.
+  const properties = [...own, ...(requireConfirm ? ["confirm"] : []), ...(job ? ["wait_seconds"] : [])];
   for (const name of definition.positional ?? []) {
     if (!properties.includes(name)) throw new Error(`${where}: positional '${name}' is not an input property.`);
   }
@@ -366,7 +369,12 @@ export function defineTool<Ctx = unknown, I extends Schema = Schema<Record<strin
     preview: definition.preview as Tool<Ctx>["preview"],
     render: definition.render as ((result: any) => string) | undefined,
     handler: definition.handler as Tool<Ctx>["handler"],
-    jsonSchema,
+    argumentNames: Object.freeze(properties),
+    // Converted when something asks: the SDK lists tools from `schema`, so a server answers
+    // `initialize` without converting every tool, and a command converts only its own.
+    get jsonSchema(): JsonSchema {
+      return (jsonSchema ??= inputJsonSchema(schema));
+    },
   });
 }
 

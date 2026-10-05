@@ -160,7 +160,7 @@ export async function runCli(app: App, argv: readonly string[], partial: Partial
     if (command === undefined) {
       if (globals.version) return printVersion(app, io);
       if (globals.help) return print(io, renderGeneralHelp(app, io.bin, io.env));
-      return print(io, renderList(app, app.tools(io.env), io.bin, io.env));
+      return print(io, renderList(app, app.tools(io.env, "cli"), io.bin, io.env));
     }
 
     if (builtin) return await runBuiltin(app, io, command, rest, globals);
@@ -170,14 +170,14 @@ export async function runCli(app: App, argv: readonly string[], partial: Partial
     }
 
     if (!tool) {
-      const candidates = [...app.tools(io.env).map((t) => t.command), ...BUILTINS, ...(app.definition.commands ?? []).map((c) => c.name)];
+      const candidates = [...app.tools(io.env, "cli").map((t) => t.command), ...BUILTINS, ...(app.definition.commands ?? []).map((c) => c.name)];
       const guess = didYouMean(command, candidates);
       throw new UsageError(`Unknown command '${command}'.${guess ? ` Did you mean '${guess}'?` : ""}`, {
         hint: `Run \`${app.bins.cli}\` to list commands, or \`${app.bins.cli} which <words>\` to find one.`,
       });
     }
 
-    const policy = app.policy(io.env);
+    const policy = app.policy(io.env, "cli");
     const seen = visibility(tool, policy);
     if (!seen.visible && seen.reason === "destructive") {
       const names = policyEnvNames(app.envPrefix);
@@ -237,7 +237,7 @@ async function runBuiltin(app: App, io: CliIO, command: string, rest: string[], 
   const target = rest.find((token) => !token.startsWith("-"));
   switch (command) {
     case "tools":
-      return print(io, renderList(app, app.tools(io.env), io.bin, io.env));
+      return print(io, renderList(app, app.tools(io.env, "cli"), io.bin, io.env));
     case "version":
       return printVersion(app, io);
     case "help": {
@@ -262,7 +262,7 @@ async function runBuiltin(app: App, io: CliIO, command: string, rest: string[], 
       if (!query) throw new UsageError("which expects the words for what you want to do: which schedule a post");
       // Only the close matches: on Threads the right command scored 20 and the eighth 9, and the
       // ten-line list cost an agent more to read than the answer was worth.
-      const found = searchTools(app.tools(io.env), query, 10, app.definition.synonyms);
+      const found = searchTools(app.tools(io.env, "cli"), query, 10, app.definition.synonyms);
       const best = found[0]?.score ?? 0;
       const matches = found.filter(({ score }, index) => index < 3 || score >= best / 2);
       if (globals.format !== "auto") {

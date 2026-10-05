@@ -104,7 +104,7 @@ export async function checkApp(app: App, options: CheckOptions = {}): Promise<Ch
     }
   }
   for (const [alias, key] of Object.entries(app.definition.flagAliases ?? {})) {
-    const takes = app.allTools.some((tool) => Object.keys((tool.jsonSchema.properties as Record<string, unknown> | undefined) ?? {}).includes(key));
+    const takes = app.allTools.some((tool) => tool.argumentNames.includes(key));
     if (!takes) add("error", "names", `--${alias} points at '${key}', which no tool's input has.`);
   }
   // A synonym pointing at a word no tool uses is a redirect to nowhere that quietly stops matching.
@@ -134,7 +134,14 @@ export async function checkApp(app: App, options: CheckOptions = {}): Promise<Ch
       add("warn", "safety", "A confirmed tool with no summary shows only its name in the refusal and the audit log.", tool.name);
     }
 
-    const schema = tool.jsonSchema;
+    // Converted here, not when the tool was defined, so an input JSON Schema cannot express fails the check.
+    let schema: JsonSchema;
+    try {
+      schema = tool.jsonSchema;
+    } catch (error) {
+      add("error", "schema", `The input cannot be written as JSON Schema, so no client can list the tool: ${(error as Error).message}`, tool.name);
+      continue;
+    }
     if (schema.type !== "object") add("error", "schema", "The input schema's root must be an object.", tool.name);
     for (const key of ["anyOf", "oneOf", "allOf"]) {
       if (key in schema) add("warn", "schema", `A root-level ${key} is flattened by some clients; nest it inside a property.`, tool.name);

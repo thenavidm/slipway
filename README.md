@@ -200,7 +200,7 @@ npx picks a binary named after the package only when the binaries point to diffe
 
 `notes-mcp` with no arguments serves MCP over stdio and stays silent on stdout. `notes-cli` with no arguments lists the commands. Any argument on either binary is a command, so a typo is reported instead of starting a server that waits on stdin.
 
-The context is built on the first call that needs it, never at startup, and so is each tool's JSON Schema validator: Stripe's 611 generated tools are ready in about 70 ms. `--help` works with nothing configured, and the server answers a client at once and explains what is missing instead of exiting.
+The context is built on the first call that needs it, never at startup, and so are each tool's JSON Schema and its validator: Stripe's 611 generated tools are ready in about 70 ms. `--help` works with nothing configured, and the server answers a client at once and explains what is missing instead of exiting.
 
 ## 3. Tools
 
@@ -476,7 +476,7 @@ A published server is started with `npx --package=<package>@latest <name>-mcp`, 
 
 A server with a hundred tools costs a client that loads every definition up front on every message. Two settings keep that down.
 
-**Toolsets.** Tag tools, then let whoever runs the server pick: `<PREFIX>_TOOLSETS=courses,users`, or `all`. Untagged tools are always on. `defaults.toolsets` sets what is on when the variable is unset, and can be a function of the environment, which keeps an older switch like `ENABLE_BETA=1` working.
+**Toolsets.** Tag tools, then let whoever runs the server pick: `<PREFIX>_TOOLSETS=courses,users`, or `all`. Untagged tools are always on. `defaults.toolsets` sets what is on when the variable is unset, and can be a function of the environment, which keeps an older switch like `ENABLE_BETA=1` working. The function also gets the surface asking, `mcp` or `cli`, so a server whose older switch only chose what an MCP client loads can leave its terminal running every command; a variable that is set applies to both. `defaults.readOnly` and `defaults.allowDestructive` take the same two arguments.
 
 **The search surface.** `<PREFIX>_SURFACE=search` replaces the tool list with three tools: `search_tools` finds a tool by what it does, `describe_tool` returns one schema, and `call_tool` runs it through the same guard. The CLI is unaffected.
 

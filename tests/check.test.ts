@@ -108,6 +108,18 @@ describe("slipway check", () => {
     expect(report.ok).toBe(false);
   });
 
+  it("converts each input to JSON Schema when asked, and check fails one that cannot be", async () => {
+    // A Date has no JSON Schema, so Zod throws on converting it. Defining the tool converts nothing.
+    const tool = defineTool({ name: "book", title: "Book a slot", description: "Book one slot on the calendar at a given time.", input: z.object({ at: z.date() }), risk: "write", handler: () => ({}) });
+    const app = slipway({ name: "dates", version: "0.0.1", context: () => ({}), tools: [tool] });
+    expect(() => tool.jsonSchema).toThrow();
+    const report = await checkApp(app, { env: {} });
+    expect(report.findings.filter((finding) => finding.check === "schema" && finding.message.startsWith("The input cannot be written as JSON Schema"))).toEqual([
+      expect.objectContaining({ level: "error", tool: "book" }),
+    ]);
+    expect(report.ok).toBe(false);
+  });
+
   it("refuses a terminal command named like a built-in or a tool", async () => {
     const app = slipway({
       name: "clash",

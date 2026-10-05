@@ -278,9 +278,10 @@ export type App<Ctx = any> = {
   readonly definition: AppDefinition<Ctx>;
   readonly allTools: readonly Tool<Ctx>[];
   readonly secrets: Secrets;
-  policy(env?: NodeJS.ProcessEnv): Policy;
-  /** The tools this environment exposes, on both surfaces. */
-  tools(env?: NodeJS.ProcessEnv): Tool<Ctx>[];
+  /** The switches on one surface, an MCP client's unless `on` says the terminal. */
+  policy(env?: NodeJS.ProcessEnv, on?: Surface): Policy;
+  /** The tools this environment exposes on one surface, an MCP client's unless `on` says the terminal. */
+  tools(env?: NodeJS.ProcessEnv, on?: Surface): Tool<Ctx>[];
   /** A tool by MCP name or CLI command, whether or not it is visible. */
   find(nameOrCommand: string): Tool<Ctx> | undefined;
   context(env?: NodeJS.ProcessEnv): Promise<Ctx>;
@@ -371,12 +372,12 @@ export function slipway<Ctx>(definition: AppDefinition<Ctx>): App<Ctx> {
     allTools,
     secrets,
 
-    policy(env = process.env) {
-      return readPolicy(env, envPrefix, definition.defaults);
+    policy(env = process.env, on = "mcp") {
+      return readPolicy(env, envPrefix, definition.defaults, on);
     },
 
-    tools(env = process.env) {
-      const policy = app.policy(env);
+    tools(env = process.env, on = "mcp") {
+      const policy = app.policy(env, on);
       return allTools.filter((tool) => visibility(tool, policy).visible);
     },
 
@@ -434,7 +435,7 @@ export function slipway<Ctx>(definition: AppDefinition<Ctx>): App<Ctx> {
 
     preflight(tool, rawArgs, options) {
       const env = options.env ?? process.env;
-      const policy = app.policy(env);
+      const policy = app.policy(env, options.surface);
       assertVisible(tool, policy, envPrefix);
       const { confirm: _confirm, ...args } = rawArgs;
       const summary = summarize(tool, args);
@@ -444,7 +445,7 @@ export function slipway<Ctx>(definition: AppDefinition<Ctx>): App<Ctx> {
 
     async run(tool, rawArgs, options) {
       const env = options.env ?? process.env;
-      const policy = app.policy(env);
+      const policy = app.policy(env, options.surface);
       assertVisible(tool, policy, envPrefix);
 
       // Slipway's own arguments are not the tool's, so the handler never sees them.

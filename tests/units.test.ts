@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { flagsFor, parseToolArgs } from "../src/cli/flags.js";
 import { formatOutput, selectFields } from "../src/cli/output.js";
 import { EXIT, httpError, toSlipwayError } from "../src/errors.js";
@@ -135,6 +135,20 @@ describe("policy", () => {
     expect([...(readPolicy({ X_ENABLE_BETA: "1", X_TOOLSETS: "beta" }, "X", defaults).toolsets as Set<string>)]).toEqual(["beta"]);
   });
 
+  it("lets a default differ between an MCP client and the terminal, and a set variable rule both", () => {
+    // Telegram's TELEGRAM_TOOLS decided what an MCP client loaded; its terminal ran every command whatever it said.
+    const defaults = {
+      toolsets: (env: NodeJS.ProcessEnv, on: "mcp" | "cli") => (on === "cli" || env.X_TOOLS === "full" ? ("all" as const) : ["core"]),
+      readOnly: (env: NodeJS.ProcessEnv, on: "mcp" | "cli") => on === "mcp" && env.X_TOOLS === "read",
+    };
+    expect([...(readPolicy({}, "X", defaults).toolsets as Set<string>)]).toEqual(["core"]);
+    expect(readPolicy({}, "X", defaults, "cli").toolsets).toBe("all");
+    expect(readPolicy({ X_TOOLS: "read" }, "X", defaults).readOnly).toBe(true);
+    expect(readPolicy({ X_TOOLS: "read" }, "X", defaults, "cli").readOnly).toBe(false);
+    expect([...(readPolicy({ X_TOOLSETS: "topics" }, "X", defaults, "cli").toolsets as Set<string>)]).toEqual(["topics"]);
+    expect(readPolicy({ X_TOOLS: "read", X_READ_ONLY: "1" }, "X", defaults, "cli").readOnly).toBe(true);
+  });
+
   it("hides the irreversible tools with destructive writes off only when the app asks", () => {
     expect(readPolicy({ X_ALLOW_DESTRUCTIVE: "0" }, "X").hideDestructive).toBe(false);
     expect(readPolicy({ X_ALLOW_DESTRUCTIVE: "0" }, "X", { destructiveOff: "hide" }).hideDestructive).toBe(true);
@@ -150,6 +164,29 @@ describe("definitions", () => {
     expect(() => slipway({ name: "x", version: "1", context: () => ({}), tools: [defineTool({ ...base, name: "a" }), defineTool({ ...base, name: "a" })] })).toThrow(
       "two tools are named 'a'",
     );
+    expect(() => defineTool({ ...base, name: "ok", input: z.object({ confirm: z.boolean() }) })).toThrow("'confirm' is Slipway's own argument");
+    expect(() => defineTool({ ...base, name: "ok", input: contract({ type: "object", properties: { wait_seconds: { type: "integer" } } }) })).toThrow(
+      "'wait_seconds' is Slipway's own argument",
+    );
+  });
+
+  it("convert a tool's input to JSON Schema only when something asks, and once", () => {
+    const input = z.object({ id: z.string(), limit: z.number().int().optional() });
+    const convert = vi.spyOn(input["~standard"].jsonSchema, "input");
+    const tool = defineTool({
+      name: "remove",
+      title: "Remove",
+      description: "Remove one item for good.",
+      risk: "destructive",
+      input,
+      positional: ["id"],
+      handler: () => ({}),
+    });
+    expect(convert).not.toHaveBeenCalled();
+    expect(tool.argumentNames).toEqual(["id", "limit", "confirm"]);
+    expect(Object.keys(tool.jsonSchema.properties as object)).toEqual(["id", "limit", "confirm"]);
+    expect(tool.jsonSchema).toBe(tool.jsonSchema);
+    expect(convert).toHaveBeenCalledTimes(1);
   });
 
   it("keep a class-based context's methods and getters in handlers", async () => {

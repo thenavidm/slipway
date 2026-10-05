@@ -67,7 +67,7 @@ function fish(bin: string, tools: readonly Tool[], words: readonly string[]): st
 }
 
 export function completionScript(app: App, shell: string | undefined, bin: string, env: NodeJS.ProcessEnv): string {
-  const tools = app.tools(env);
+  const tools = app.tools(env, "cli");
   // The built-ins, then any terminal commands the app adds, such as logout.
   const words = [...BUILTINS, ...(app.definition.commands ?? []).map((command) => command.name)];
   if (shell === "bash") return bash(bin, tools, words);

@@ -65,6 +65,18 @@ export function isSchema(value: unknown): value is Schema {
   return typeof std?.validate === "function" && typeof std.jsonSchema?.input === "function";
 }
 
+/**
+ * The top-level argument names of an input. A Zod object names them in its
+ * shape, so defining a tool never turns its schema into JSON Schema: that took
+ * Facebook's 27 tools 3.7 ms of CPU before the server's first answer, and the
+ * SDK converts each one again for `tools/list`.
+ */
+export function propertyNames(schema: Schema): string[] {
+  const shape = (schema as { shape?: unknown }).shape;
+  if (shape !== null && typeof shape === "object") return Object.keys(shape);
+  return Object.keys((schema["~standard"].jsonSchema.input(TARGET).properties as Record<string, unknown> | undefined) ?? {});
+}
+
 /** The JSON Schema an MCP client receives for this input. */
 export function inputJsonSchema(schema: Schema): JsonSchema {
   return schema["~standard"].jsonSchema.input(TARGET);

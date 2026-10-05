@@ -56,7 +56,7 @@ function outputFlagsFor(tool: Tool): Array<[string, string]> {
 
 /** Why some commands are not listed, and the setting that lists them. */
 function hiddenNote(app: App, env: NodeJS.ProcessEnv): string[] {
-  const policy = app.policy(env);
+  const policy = app.policy(env, "cli");
   const names = policyEnvNames(app.envPrefix);
   const off = new Set<string>();
   let byToolset = 0;
@@ -224,7 +224,7 @@ function table(rows: Array<[string, string]>): (row: [string, string]) => string
 export function renderGeneralHelp(app: App, bin: string, env: NodeJS.ProcessEnv = process.env): string {
   const names = policyEnvNames(app.envPrefix);
   const applies = switchesThatApply(app.allTools);
-  const policy = app.policy(env);
+  const policy = app.policy(env, "cli");
   const cache = app.allTools.some((tool) => tool.cache);
   const sync = app.allTools.some((tool) => tool.sync);
   // An agent often reads this first and pays for it again on every later step, so the

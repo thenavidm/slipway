@@ -29,10 +29,10 @@ export const EXIT_MEANINGS: Record<number, string> = {
 };
 
 export function agentContext(app: App, env: NodeJS.ProcessEnv, bin: string, options: { brief?: boolean } = {}) {
-  const policy = app.policy(env);
+  const policy = app.policy(env, "cli");
   const names = policyEnvNames(app.envPrefix);
   const applies = switchesThatApply(app.allTools);
-  const tools = app.tools(env);
+  const tools = app.tools(env, "cli");
   const hidden = app.allTools.length - tools.length;
   // Terminal commands the app adds beside its tools, such as logout, and a sign-in flow that says what it takes.
   const login = app.definition.login;
