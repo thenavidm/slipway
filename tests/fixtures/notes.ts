@@ -168,7 +168,10 @@ export function createApp(store: Store = createStore()) {
     secrets: (ctx) => [ctx.key],
     tools,
     toolsets: { admin: "Exports and account-wide operations" },
-    resources: [{ name: "about", uri: "notes://about", title: "About notes", mimeType: "text/markdown", read: () => "Notes are short texts." }],
+    resources: [
+      { name: "about", uri: "notes://about", title: "About notes", mimeType: "text/markdown", read: () => "Notes are short texts." },
+      { name: "account", uri: "notes://account", title: "The account", read: () => ({ signed_in: true }), listed: (env) => env.NOTES_ACCOUNT === "1" },
+    ],
     prompts: [{ name: "summarize", title: "Summarize notes", description: "Summarize every note.", render: () => "Summarize my notes." }],
     login: "Set NOTES_API_KEY to a key from the demo dashboard.",
   });

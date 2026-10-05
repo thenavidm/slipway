@@ -13,6 +13,8 @@ import type { Tool } from "../tool.js";
 import { flagsFor, type Flag } from "./flags.js";
 
 const COLUMN = 30;
+/** The widest entry the general help aligns the others to. */
+const WIDE = 40;
 
 /** The words the CLI owns, which no tool command may take. */
 export const BUILTINS = ["help", "tools", "schema", "agent-context", "which", "doctor", "login", "completion", "version", "data", "install"] as const;
@@ -197,6 +199,16 @@ export function renderToolHelp(tool: Tool, bin: string, aliases: Readonly<Record
   return lines.join("\n");
 }
 
+/**
+ * Two aligned columns. An entry longer than WIDE, such as a login that takes three
+ * flags, puts its help on the next line instead of padding every other row out to
+ * its width: on Substack that padding was a third of the general help's tokens.
+ */
+function table(rows: Array<[string, string]>): (row: [string, string]) => string {
+  const width = Math.max(0, ...rows.map(([left]) => left.length).filter((length) => length <= WIDE)) + 3;
+  return ([left, help]) => (left.length <= WIDE ? `  ${left.padEnd(width)}${help}` : `  ${left}\n  ${" ".repeat(width)}${help}`);
+}
+
 export function renderGeneralHelp(app: App, bin: string): string {
   const names = policyEnvNames(app.envPrefix);
   const cache = app.allTools.some((tool) => tool.cache);
@@ -245,19 +257,19 @@ export function renderGeneralHelp(app: App, bin: string): string {
   const flags = GLOBAL_FLAGS.map(([flag]) => flag).filter(
     (flag) => flag !== "--agent" && (flag !== "--wait" || jobs) && (flag !== "--refresh" || cache),
   );
-  const width = Math.max(...[...commands, ...settings].map(([left]) => left.length)) + 3;
-  const row = ([left, help]: [string, string]) => `  ${left.padEnd(width)}${help}`;
+  const commandRow = table(commands);
+  const settingRow = table(settings);
   const lines = [
     ``,
     `${app.title} ${app.version}`,
     ``,
-    ...commands.map(row),
+    ...commands.map(commandRow),
     `  Also: schema <command>, agent-context [--brief] (all of this as JSON), completion <shell>.`,
     ``,
     `Flags: ${flags.join(", ")}, and --agent: compact JSON, no prompts, never confirms a write.`,
     ``,
     `Settings:`,
-    ...settings.map(row),
+    ...settings.map(settingRow),
     ...(tuning.length ? [`  Also: ${tuning.join(", ")}, described in agent-context.`] : []),
     ``,
     `Exit codes: ${EXIT.ok} ok, ${EXIT.error} unexpected, ${EXIT.usage} usage or refused, ${EXIT.notFound} not found, ${EXIT.auth} auth, ${EXIT.api} API, ${EXIT.rateLimited} rate limited, ${EXIT.notConfigured} not configured`,

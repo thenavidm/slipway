@@ -40,6 +40,12 @@ export type ResourceDefinition<Ctx> = {
   mimeType?: string;
   /** A string is sent as text; anything else as JSON. */
   read: (ctx: Ctx) => unknown | Promise<unknown>;
+  /**
+   * False leaves the resource out of the list, such as one that reads an account
+   * nobody has connected yet. A client that sees a resource may list it to the
+   * model on every message, so one that can only fail costs tokens for nothing.
+   */
+  listed?: (env: NodeJS.ProcessEnv) => boolean;
 };
 
 export type PromptDefinition<Ctx> = {

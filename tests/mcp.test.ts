@@ -160,6 +160,17 @@ describe("MCP surface", () => {
     expect(prompt.messages[0]!.content.text).toBe("Summarize my notes.");
   });
 
+  it("leaves out a resource whose listed check says no", async () => {
+    const without = await connect(createApp());
+    const hidden = (await without.request("resources/list")) as { resources: Array<{ uri: string }> };
+    await without.close();
+    const withAccount = await connect(createApp(), { env: { NOTES_ACCOUNT: "1" } });
+    const shown = (await withAccount.request("resources/list")) as { resources: Array<{ uri: string }> };
+    await withAccount.close();
+    expect(hidden.resources.map((resource) => resource.uri)).toEqual(["notes://about"]);
+    expect(shown.resources.map((resource) => resource.uri)).toEqual(["notes://about", "notes://account"]);
+  });
+
   it("sends the app's instructions at initialize", async () => {
     const mcp = await connect(createApp());
     await mcp.close();

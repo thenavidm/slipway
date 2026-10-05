@@ -79,7 +79,7 @@ export function buildServer<Ctx>(app: App<Ctx>, env: NodeJS.ProcessEnv): McpServ
   if (policy.surface === "search") registerSearchSurface(server, app, env, policy);
   else for (const tool of app.tools(env)) registerTool(server, app, tool, env, policy);
 
-  for (const resource of app.definition.resources ?? []) registerResource(server, app, resource, env);
+  for (const resource of app.definition.resources ?? []) if (resource.listed?.(env) ?? true) registerResource(server, app, resource, env);
   for (const prompt of app.definition.prompts ?? []) registerPrompt(server, app, prompt, env);
   return server;
 }

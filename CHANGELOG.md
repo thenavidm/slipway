@@ -2,6 +2,11 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.9, 2026-10-05: what Substack needed
+
+- **A resource can wait for an account.** `listed(env)` leaves a resource out until it returns true. Substack 2.2.3 offered its two resources only once a publication was connected; on Slipway they were always offered, and Claude Code then adds its own two resource tools to every message: 40 tokens in tool search, for reads that could only fail.
+- **The general help keeps its columns narrow.** Commands and settings each line up on their own, and an entry longer than 40 characters puts its help on the next line instead of pushing every other row out to its width. Substack's `login [<publication>] [--paste | --playwriter | --playwright]` started every description in the help at column 80, past the edge of a standard terminal; they now start at 34.
+
 ## 0.1.8, 2026-10-05: what Midjourney and Substack needed
 
 - **HTTP checks Origin.** A request whose `Origin` is another site is refused unless `<PREFIX>_HTTP_ALLOWED_ORIGINS` lists it, as the MCP transport spec asks: a page in a browser can send a request to a localhost server, and only that header says where it came from. Clients that are not browsers send none and are unaffected. Substack's own server did this before it moved.
