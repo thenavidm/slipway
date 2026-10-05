@@ -2,6 +2,10 @@
 
 What changed in Slipway, newest first.
 
+## 0.1.12, 2026-10-05: what the Meta Ad Library needed
+
+- **The write switches appear only where they act.** `<PREFIX>_READ_ONLY` and `<PREFIX>_AUDIT_LOG` are listed in the general help, `agent-context` and the generated settings table only when a tool writes, and `<PREFIX>_ALLOW_DESTRUCTIVE` and `<PREFIX>_CONFIRM` only when a tool can be irreversible, spends money or needs confirming. The Meta Ad Library server only reads, and its help offered to "refuse the irreversible writes"; it is now 40 tokens shorter, 399 against 439. The switches still work if set.
+
 ## 0.1.11, 2026-10-05: what WordPress needed
 
 - **Records no longer advertise `propertyNames`.** Zod 4 gives every `z.record` `propertyNames: { type: "string" }`, which every JSON object key already is, and the Zod 3 converters never wrote it. Slipway leaves it out of what clients receive, as it does the safe-integer bounds, and validation still runs on the schema itself. Each one cost 8 tokens; WordPress has nine. An argument that happens to be named `propertyNames` is a name, so it stays.

@@ -9,7 +9,7 @@
 import type { App } from "./app.js";
 import { flagsFor } from "./cli/flags.js";
 import { exampleCommand } from "./cli/help.js";
-import { policyEnvNames } from "./policy.js";
+import { policyEnvNames, switchesThatApply } from "./policy.js";
 import type { Tool } from "./tool.js";
 
 function cell(text: string): string {
@@ -53,17 +53,22 @@ export function toolReference(app: App, tools: readonly Tool[], heading = "###")
 
 export function settingsTable(app: App): string {
   const names = policyEnvNames(app.envPrefix);
+  const applies = switchesThatApply(app.allTools);
   return [
     "| Variable | What it does |",
     "|---|---|",
     ...(app.definition.settings ?? []).map((setting) => `| \`${setting.env}\` | ${cell(setting.description)}${setting.secret ? " Keep it private." : ""} |`),
-    `| \`${names.readOnly}=1\` | Hide and refuse every write |`,
-    `| \`${names.allowDestructive}=0\` | Keep writes, refuse the public or irreversible ones${app.allTools.some((tool) => tool.spends) ? " and paid calls" : ""} |`,
+    ...(applies.readOnly ? [`| \`${names.readOnly}=1\` | Hide and refuse every write |`] : []),
+    ...(applies.allowDestructive
+      ? [`| \`${names.allowDestructive}=0\` | Keep writes, refuse the public or irreversible ones${app.allTools.some((tool) => tool.spends) ? " and paid calls" : ""} |`]
+      : []),
     `| \`${names.toolsets}\` | Comma-separated toolsets to turn on, or \`all\` |`,
     `| \`${names.surface}=search\` | List three tools that find, describe and run the rest |`,
-    `| \`${names.auditLog}\` | File that records every attempted write |`,
+    ...(applies.auditLog ? [`| \`${names.auditLog}\` | File that records every attempted write |`] : []),
     `| \`${names.toolTimeoutMs}\` | Give up on any tool after this many milliseconds |`,
-    `| \`${names.confirm}=model\` | Let \`confirm: true\` alone confirm a call, for an agent with no person to ask. The default, \`human\`, asks a person wherever the client can |`,
+    ...(applies.confirm
+      ? [`| \`${names.confirm}=model\` | Let \`confirm: true\` alone confirm a call, for an agent with no person to ask. The default, \`human\`, asks a person wherever the client can |`]
+      : []),
   ].join("\n");
 }
 

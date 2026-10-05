@@ -349,11 +349,43 @@ describe("CLI: terminal commands an app adds", () => {
     });
     const help = (await cli(tuned, ["--help"])).stdout;
     expect(help).toContain("A token for the account.");
-    expect(help).toContain("Also: PROBE_TIMEOUT_MS, PROBE_MAX_RETRIES, PROBE_SURFACE, PROBE_AUDIT_LOG, PROBE_TOOL_TIMEOUT_MS, PROBE_CONFIRM, PROBE_DEBUG, described in agent-context.");
+    // No tool writes, so the audit log and the confirm switch, which act only on writes, are left out.
+    expect(help).toContain("Also: PROBE_TIMEOUT_MS, PROBE_MAX_RETRIES, PROBE_SURFACE, PROBE_TOOL_TIMEOUT_MS, PROBE_DEBUG, described in agent-context.");
     expect(help).not.toContain("debug lines on stderr");
     expect(help).not.toContain("Per-request deadline");
     const context = JSON.parse((await cli(tuned, ["agent-context"])).stdout);
     expect(context.settings.find((setting: { env: string }) => setting.env === "PROBE_TIMEOUT_MS").description).toBe("Per-request deadline. Defaults to 30000.");
+  });
+});
+
+describe("the write switches", () => {
+  const settingNames = async (app: Parameters<typeof cli>[0]) =>
+    (JSON.parse((await cli(app, ["agent-context"])).stdout).settings as Array<{ env: string }>).map((setting) => setting.env);
+
+  it("are left out for an app whose tools only read, where they would change nothing", async () => {
+    const reader = slipway({
+      name: "probe",
+      version: "1.0.0",
+      context: () => ({}),
+      tools: [defineTool({ name: "list_notes", title: "List notes", description: "List every note, newest first.", input: z.object({}), risk: "read", handler: () => [] })],
+    });
+    const help = (await cli(reader, ["--help"])).stdout;
+    for (const name of ["PROBE_READ_ONLY", "PROBE_ALLOW_DESTRUCTIVE", "PROBE_AUDIT_LOG", "PROBE_CONFIRM"]) {
+      expect(help).not.toContain(name);
+      expect(await settingNames(reader)).not.toContain(name);
+    }
+  });
+
+  it("keep read-only and the audit log for a write, and the rest only once something cannot be undone", async () => {
+    const write = defineTool({ name: "add_note", title: "Add a note", description: "Add a note to the list.", input: z.object({ text: z.string() }), risk: "write", handler: () => ({}) });
+    const writer = slipway({ name: "probe", version: "1.0.0", context: () => ({}), tools: [write] });
+    expect(await settingNames(writer)).toEqual(expect.arrayContaining(["PROBE_READ_ONLY", "PROBE_AUDIT_LOG"]));
+    expect(await settingNames(writer)).not.toContain("PROBE_ALLOW_DESTRUCTIVE");
+    expect(await settingNames(writer)).not.toContain("PROBE_CONFIRM");
+    const remove = defineTool({ name: "delete_note", title: "Delete a note", description: "Delete a note for good.", input: z.object({ id: z.string() }), risk: "destructive", handler: () => ({}) });
+    const deleter = slipway({ name: "probe", version: "1.0.0", context: () => ({}), tools: [write, remove] });
+    expect(await settingNames(deleter)).toEqual(expect.arrayContaining(["PROBE_READ_ONLY", "PROBE_ALLOW_DESTRUCTIVE", "PROBE_AUDIT_LOG", "PROBE_CONFIRM"]));
+    expect((await cli(deleter, ["--help"])).stdout).toContain("PROBE_ALLOW_DESTRUCTIVE=0");
   });
 });
 

@@ -69,6 +69,23 @@ export type PolicyEnv = {
   dataDir: string;
 };
 
+/**
+ * Which of the write switches can change anything for these tools. A server
+ * whose tools all read has nothing for read-only mode to hide or the audit log
+ * to record, and one with no irreversible, paid or confirmed call has nothing
+ * for the destructive and confirm switches to act on, so help, agent-context
+ * and the generated docs leave those out. They still work if set.
+ */
+export function switchesThatApply(tools: readonly Tool[]): { readOnly: boolean; allowDestructive: boolean; auditLog: boolean; confirm: boolean } {
+  const writes = tools.some((tool) => tool.risk !== "read");
+  return {
+    readOnly: writes,
+    allowDestructive: tools.some((tool) => tool.risk === "destructive" || tool.spends),
+    auditLog: writes,
+    confirm: tools.some((tool) => tool.requireConfirm),
+  };
+}
+
 export function policyEnvNames(prefix: string): PolicyEnv {
   return {
     readOnly: `${prefix}_READ_ONLY`,

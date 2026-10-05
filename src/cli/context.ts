@@ -9,7 +9,7 @@
 import { createRequire } from "node:module";
 import type { App } from "../app.js";
 import { EXIT } from "../errors.js";
-import { policyEnvNames } from "../policy.js";
+import { policyEnvNames, switchesThatApply } from "../policy.js";
 import { outputJsonSchema } from "../schema.js";
 import { exampleCommand, GLOBAL_FLAGS } from "./help.js";
 import { flagsFor } from "./flags.js";
@@ -31,6 +31,7 @@ export const EXIT_MEANINGS: Record<number, string> = {
 export function agentContext(app: App, env: NodeJS.ProcessEnv, bin: string, options: { brief?: boolean } = {}) {
   const policy = app.policy(env);
   const names = policyEnvNames(app.envPrefix);
+  const applies = switchesThatApply(app.allTools);
   const tools = app.tools(env);
   const hidden = app.allTools.length - tools.length;
   // Terminal commands the app adds beside its tools, such as logout, and a sign-in flow that says what it takes.
@@ -83,15 +84,19 @@ export function agentContext(app: App, env: NodeJS.ProcessEnv, bin: string, opti
         ...(setting.secret ? { secret: true } : {}),
         description: setting.description,
       })),
-      { env: names.readOnly, value: policy.readOnly, description: "hide and refuse every write" },
-      { env: names.allowDestructive, value: policy.allowDestructive, description: app.allTools.some((tool) => tool.spends) ? "allow public or irreversible writes and paid calls" : "allow public or irreversible writes" },
+      ...(applies.readOnly ? [{ env: names.readOnly, value: policy.readOnly, description: "hide and refuse every write" }] : []),
+      ...(applies.allowDestructive
+        ? [{ env: names.allowDestructive, value: policy.allowDestructive, description: app.allTools.some((tool) => tool.spends) ? "allow public or irreversible writes and paid calls" : "allow public or irreversible writes" }]
+        : []),
       ...(app.allTools.some((tool) => tool.tags.length > 0)
         ? [{ env: names.toolsets, value: policy.toolsets === "all" ? "all" : [...policy.toolsets], description: "toolsets that are on" }]
         : []),
       { env: names.surface, value: policy.surface, description: "full tool list, or search for very large catalogs" },
-      { env: names.auditLog, value: policy.auditLog ?? null, description: "file that records every attempted write" },
+      ...(applies.auditLog ? [{ env: names.auditLog, value: policy.auditLog ?? null, description: "file that records every attempted write" }] : []),
       { env: names.toolTimeoutMs, value: policy.toolTimeoutMs ?? null, description: "deadline for any tool" },
-      { env: names.confirm, value: policy.confirm, description: "who confirms a confirmed call over MCP: human asks a person where the client can, model accepts confirm: true" },
+      ...(applies.confirm
+        ? [{ env: names.confirm, value: policy.confirm, description: "who confirms a confirmed call over MCP: human asks a person where the client can, model accepts confirm: true" }]
+        : []),
       { env: `${app.envPrefix}_HTTP_PORT`, value: env[`${app.envPrefix}_HTTP_PORT`] ?? null, description: `port for --http, ${app.definition.httpPort ?? 8787} when unset` },
       { env: `${app.envPrefix}_HTTP_HOST`, value: env[`${app.envPrefix}_HTTP_HOST`] ?? null, description: "address for --http, 127.0.0.1 when unset; any other needs a token" },
       { env: `${app.envPrefix}_HTTP_TOKEN`, set: Boolean(env[`${app.envPrefix}_HTTP_TOKEN`]), secret: true, description: "bearer token --http requires" },

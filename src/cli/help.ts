@@ -7,7 +7,7 @@
 
 import type { App } from "../app.js";
 import { EXIT } from "../errors.js";
-import { policyEnvNames, riskMark, visibility } from "../policy.js";
+import { policyEnvNames, riskMark, switchesThatApply, visibility } from "../policy.js";
 import { firstSentence } from "../search.js";
 import type { Tool } from "../tool.js";
 import { flagsFor, type Flag } from "./flags.js";
@@ -214,6 +214,7 @@ function table(rows: Array<[string, string]>): (row: [string, string]) => string
 
 export function renderGeneralHelp(app: App, bin: string): string {
   const names = policyEnvNames(app.envPrefix);
+  const applies = switchesThatApply(app.allTools);
   const cache = app.allTools.some((tool) => tool.cache);
   const sync = app.allTools.some((tool) => tool.sync);
   const jobs = app.allTools.some((tool) => tool.job);
@@ -245,20 +246,24 @@ export function renderGeneralHelp(app: App, bin: string): string {
   const tuning = [
     ...(app.definition.settings ?? []).filter((setting) => setting.tuning).map((setting) => setting.env),
     names.surface,
-    names.auditLog,
+    ...(applies.auditLog ? [names.auditLog] : []),
     names.toolTimeoutMs,
-    names.confirm,
+    ...(applies.confirm ? [names.confirm] : []),
     ...(cache ? [names.cache] : []),
     ...(cache || sync ? [names.dataDir] : []),
     `${app.envPrefix}_DEBUG`,
   ];
   const settings: Array<[string, string]> = [
     ...(app.definition.settings ?? []).filter((setting) => !setting.tuning).map((setting): [string, string] => [setting.env, setting.description]),
-    [`${names.readOnly}=1`, "hide and refuse every write"],
-    [
-      `${names.allowDestructive}=0`,
-      `${app.definition.defaults?.destructiveOff === "hide" ? "hide and refuse" : "refuse"} the irreversible writes${app.allTools.some((tool) => tool.spends) ? " and paid calls" : ""}`,
-    ],
+    ...(applies.readOnly ? ([[`${names.readOnly}=1`, "hide and refuse every write"]] as Array<[string, string]>) : []),
+    ...(applies.allowDestructive
+      ? ([
+          [
+            `${names.allowDestructive}=0`,
+            `${app.definition.defaults?.destructiveOff === "hide" ? "hide and refuse" : "refuse"} the irreversible writes${app.allTools.some((tool) => tool.spends) ? " and paid calls" : ""}`,
+          ],
+        ] as Array<[string, string]>)
+      : []),
     // With no tagged tool every tool is always on, so the switch would do nothing.
     ...(app.allTools.some((tool) => tool.tags.length > 0) ? ([[`${names.toolsets}=a,b`, "only these toolsets, or all"]] as Array<[string, string]>) : []),
     [`${app.envPrefix}_HTTP_PORT / _HOST / _TOKEN / _ALLOWED_ORIGINS`, "for --http"],
